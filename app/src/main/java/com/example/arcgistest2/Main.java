@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MenuItem;
 import android.view.WindowManager;
 import android.widget.Button;
 
@@ -99,12 +100,32 @@ public class Main extends AppCompatActivity {
         DrawerLayout drawerLayout = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
 
-// 处理菜单项点击
-        navigationView.setNavigationItemSelectedListener(item -> {
-            int id = item.getItemId();
-            // 根据点击的菜单项进行相应的操作
-            drawerLayout.closeDrawers();
-            return true;
+
+        // 处理菜单项点击事件
+        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
+            @Override
+            public boolean onNavigationItemSelected(MenuItem item) {
+                int id = item.getItemId();
+
+                if (id == R.id.nav_home) {  // 点击“首页”菜单项
+                    // 跳转回当前Activity并清空历史栈
+                    Intent homeIntent = new Intent(Main.this, Main.class);
+                    homeIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);  // 清空历史栈
+                    startActivity(homeIntent);  // 跳转到首页
+                    finish();  // 结束当前Activity（如果需要关闭当前Activity）
+                } else if (id == R.id.nav_action1) {  // 点击“其他页面”菜单项
+                    // 跳转到其他页面
+                    Intent otherIntent = new Intent(Main.this, Action1.class);
+                    startActivity(otherIntent);  // 跳转到其他页面
+                }else if(id==R.id.nav_action2){
+                    Intent SecondIntent = new Intent(Main.this,Action2.class);
+                    startActivity(SecondIntent);
+                }
+
+                // 关闭导航菜单
+                drawerLayout.closeDrawers();
+                return true;
+            }
         });
     }
 
@@ -130,6 +151,7 @@ public class Main extends AppCompatActivity {
         loadLayerButton.setOnClickListener(v -> {
             // 可以添加加载图层的代码
         });
+
     }
 
     // onActivityResult 方法，处理从另一个活动返回的结果

@@ -17,8 +17,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TestApplication"
         tools:targetApi="31">
-        <activity android:name=".Attribute_select" />
-        <activity android:name=".Input_select" />
         <activity android:name=".Main"
             android:exported="true">
             <intent-filter>

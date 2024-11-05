@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -101,8 +102,9 @@ public class Main extends AppCompatActivity {
         setBackgroundGrid();
         DrawerLayout drawerLayout = findViewById(R.id.drawer_layout);
         //NavigationView navigationView = findViewById(R.id.nav_view);
+
         Button button_tuceng=findViewById(R.id.action1);
-        LinearLayout expandableLayout1 = findViewById(R.id.expandable_layout_1);
+        RelativeLayout expandableLayout1 = findViewById(R.id.expandable_layout_1);
         button_tuceng.setOnClickListener(v -> {
             if (expandableLayout1.getVisibility() == View.GONE) {
                 expandableLayout1.setVisibility(View.VISIBLE);
@@ -111,7 +113,7 @@ public class Main extends AppCompatActivity {
             }
         });
         Button button_shuxing=findViewById(R.id.action2);
-        LinearLayout expandableLayout2 = findViewById(R.id.expandable_layout_2);
+        RelativeLayout expandableLayout2 = findViewById(R.id.expandable_layout_2);
         button_shuxing.setOnClickListener(v -> {
             if (expandableLayout2.getVisibility() == View.GONE) {
                 expandableLayout2.setVisibility(View.VISIBLE);
@@ -120,7 +122,7 @@ public class Main extends AppCompatActivity {
             }
         });
         Button button_cesuan=findViewById(R.id.action3);
-        LinearLayout expandableLayout3 = findViewById(R.id.expandable_layout_3);
+        RelativeLayout expandableLayout3 = findViewById(R.id.expandable_layout_3);
         button_cesuan.setOnClickListener(v -> {
             if (expandableLayout3.getVisibility() == View.GONE) {
                 expandableLayout3.setVisibility(View.VISIBLE);
@@ -129,7 +131,7 @@ public class Main extends AppCompatActivity {
             }
         });
         Button button_GPS=findViewById(R.id.action4);
-        LinearLayout expandableLayout4 = findViewById(R.id.expandable_layout_4);
+        RelativeLayout expandableLayout4 = findViewById(R.id.expandable_layout_4);
         button_GPS.setOnClickListener(v -> {
             if (expandableLayout4.getVisibility() == View.GONE) {
                 expandableLayout4.setVisibility(View.VISIBLE);

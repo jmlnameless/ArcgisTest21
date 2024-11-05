@@ -9,8 +9,10 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.LinearLayout;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -98,33 +100,41 @@ public class Main extends AppCompatActivity {
         // 设置地图背景
         setBackgroundGrid();
         DrawerLayout drawerLayout = findViewById(R.id.drawer_layout);
-        NavigationView navigationView = findViewById(R.id.nav_view);
-
-
-        // 处理菜单项点击事件
-        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(MenuItem item) {
-                int id = item.getItemId();
-
-                if (id == R.id.nav_home) {  // 点击“首页”菜单项
-                    // 跳转回当前Activity并清空历史栈
-                    Intent homeIntent = new Intent(Main.this, Main.class);
-                    homeIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);  // 清空历史栈
-                    startActivity(homeIntent);  // 跳转到首页
-                    finish();  // 结束当前Activity（如果需要关闭当前Activity）
-                } else if (id == R.id.nav_action1) {  // 点击“其他页面”菜单项
-                    // 跳转到其他页面
-                    Intent otherIntent = new Intent(Main.this, Action1.class);
-                    startActivity(otherIntent);  // 跳转到其他页面
-                }else if(id==R.id.nav_action2){
-                    Intent SecondIntent = new Intent(Main.this,Action2.class);
-                    startActivity(SecondIntent);
-                }
-
-                // 关闭导航菜单
-                drawerLayout.closeDrawers();
-                return true;
+        //NavigationView navigationView = findViewById(R.id.nav_view);
+        Button button_tuceng=findViewById(R.id.action1);
+        LinearLayout expandableLayout1 = findViewById(R.id.expandable_layout_1);
+        button_tuceng.setOnClickListener(v -> {
+            if (expandableLayout1.getVisibility() == View.GONE) {
+                expandableLayout1.setVisibility(View.VISIBLE);
+            } else {
+                expandableLayout1.setVisibility(View.GONE);
+            }
+        });
+        Button button_shuxing=findViewById(R.id.action2);
+        LinearLayout expandableLayout2 = findViewById(R.id.expandable_layout_2);
+        button_shuxing.setOnClickListener(v -> {
+            if (expandableLayout2.getVisibility() == View.GONE) {
+                expandableLayout2.setVisibility(View.VISIBLE);
+            } else {
+                expandableLayout2.setVisibility(View.GONE);
+            }
+        });
+        Button button_cesuan=findViewById(R.id.action3);
+        LinearLayout expandableLayout3 = findViewById(R.id.expandable_layout_3);
+        button_cesuan.setOnClickListener(v -> {
+            if (expandableLayout3.getVisibility() == View.GONE) {
+                expandableLayout3.setVisibility(View.VISIBLE);
+            } else {
+                expandableLayout3.setVisibility(View.GONE);
+            }
+        });
+        Button button_GPS=findViewById(R.id.action4);
+        LinearLayout expandableLayout4 = findViewById(R.id.expandable_layout_4);
+        button_GPS.setOnClickListener(v -> {
+            if (expandableLayout4.getVisibility() == View.GONE) {
+                expandableLayout4.setVisibility(View.VISIBLE);
+            } else {
+                expandableLayout4.setVisibility(View.GONE);
             }
         });
     }
@@ -139,12 +149,6 @@ public class Main extends AppCompatActivity {
         Button shrinkButton = findViewById(R.id.shrink);
         shrinkButton.setOnClickListener(v -> handleShrinkButtonClick());
 
-//        // 提交按钮，用于启动另一个活动
-//        Button submitButton = findViewById(R.id.Attribute_queries);
-//        submitButton.setOnClickListener(v -> {
-//            Intent intent = new Intent(Main.this, Attribute_select.class);
-//            startActivityForResult(intent, 1);
-//        });
 
         // 加载图层按钮，可以添加加载图层的代码
         Button loadLayerButton = findViewById(R.id.Load_layer);

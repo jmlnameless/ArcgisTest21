@@ -5,10 +5,18 @@
         android:actionLayout="@layout/custom_button"/>
     <item
         android:id="@+id/nav_action1"
-        android:title="功能1"
+        android:title="图层管理"
         android:actionLayout="@layout/custom_button"/>
     <item
         android:id="@+id/nav_action2"
-        android:title="功能2"
+        android:title="要素查询"
+        android:actionLayout="@layout/custom_button"/>
+    <item
+        android:id="@+id/nav_action3"
+        android:title="测距量算"
+        android:actionLayout="@layout/custom_button"/>
+    <item
+        android:id="@+id/nav_action4"
+        android:title="GPS数据管理"
         android:actionLayout="@layout/custom_button"/>
 </menu>

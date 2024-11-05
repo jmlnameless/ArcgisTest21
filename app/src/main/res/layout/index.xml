@@ -12,6 +12,8 @@
         android:layout_height="match_parent">
 
         <!-- MapView -->
+
+        <!-- 放大按钮 -->
         <com.esri.arcgisruntime.mapping.view.MapView
             android:id="@+id/mapView"
             android:layout_width="0dp"
@@ -21,16 +23,15 @@
             app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintVertical_bias="1.0" />
+            app:layout_constraintVertical_bias="0.0" />
 
-        <!-- 放大按钮 -->
         <Button
             android:id="@+id/magnify"
             android:layout_width="48dp"
             android:layout_height="58dp"
             android:text="+"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintVertical_bias="0.5"
+            app:layout_constraintVertical_bias="0.6"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             android:layout_marginEnd="16dp" />
@@ -42,10 +43,11 @@
             android:layout_height="58dp"
             android:text="-"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintVertical_bias="0.5"
+            app:layout_constraintVertical_bias="0.4"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="@id/magnify"
             android:layout_marginEnd="16dp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -75,12 +77,151 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- DrawerLayout 侧边菜单 -->
-    <com.google.android.material.navigation.NavigationView
-        android:id="@+id/nav_view"
+    <LinearLayout
+        android:id="@+id/left_drawer"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:layout_gravity="start"
-        app:menu="@menu/menu" />
+        android:orientation="vertical"
+        android:gravity="center_vertical|start"
+        >
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_gravity="center_vertical|start">
+            <Button
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="图层管理"
+                android:id="@+id/action1" />
+            <LinearLayout
+                android:id="@+id/expandable_layout_1"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                android:paddingLeft="16dp">
+                <Button
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="图层列表"
+                    android:id="@+id/tucengliebiao" />
+                <Button
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="图例"
+                    android:id="@+id/tuli"
+                    app:layout_constraintEnd_toEndOf="@id/tucengliebiao"
+                    />
+
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 侧边菜单中的各项 -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/action2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="属性查询" />
+
+            <LinearLayout
+                android:id="@+id/expandable_layout_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:paddingLeft="16dp">
+
+                <Button
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="图查属性"
+                    android:id="@+id/tuchashuxing"/>
+
+                <Button
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="属性查询"
+                    android:id="@+id/shuxingchaxun"
+                    app:layout_constraintEnd_toEndOf="@id/tucengliebiao"
+                    />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="查询结果"/>
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/action3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="要素编辑" />
+
+            <LinearLayout
+                android:id="@+id/expandable_layout_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:paddingLeft="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="要素模板" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="要素编辑工具"/>
+
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/action4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="GPS数据" />
+
+            <LinearLayout
+                android:id="@+id/expandable_layout_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:paddingLeft="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="拓展内容4-1" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="拓展内容4-2" />
+            </LinearLayout>
+        </LinearLayout>
+
+
+
+        <!-- 可以添加更多菜单项 -->
+    </LinearLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>

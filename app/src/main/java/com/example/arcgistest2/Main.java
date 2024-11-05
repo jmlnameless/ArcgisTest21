@@ -13,6 +13,7 @@ import android.widget.Button;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.esri.arcgisruntime.concurrent.ListenableFuture;
 import com.esri.arcgisruntime.data.Feature;
@@ -28,6 +29,7 @@ import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleFillSymbol;
 import com.esri.arcgisruntime.symbology.SimpleLineSymbol;
 import com.esri.arcgisruntime.symbology.SimpleRenderer;
+import com.google.android.material.navigation.NavigationView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -94,6 +96,16 @@ public class Main extends AppCompatActivity {
 
         // 设置地图背景
         setBackgroundGrid();
+        DrawerLayout drawerLayout = findViewById(R.id.drawer_layout);
+        NavigationView navigationView = findViewById(R.id.nav_view);
+
+// 处理菜单项点击
+        navigationView.setNavigationItemSelectedListener(item -> {
+            int id = item.getItemId();
+            // 根据点击的菜单项进行相应的操作
+            drawerLayout.closeDrawers();
+            return true;
+        });
     }
 
     // 设置按钮点击事件
@@ -106,12 +118,12 @@ public class Main extends AppCompatActivity {
         Button shrinkButton = findViewById(R.id.shrink);
         shrinkButton.setOnClickListener(v -> handleShrinkButtonClick());
 
-        // 提交按钮，用于启动另一个活动
-        Button submitButton = findViewById(R.id.Attribute_queries);
-        submitButton.setOnClickListener(v -> {
-            Intent intent = new Intent(Main.this, Attribute_select.class);
-            startActivityForResult(intent, 1);
-        });
+//        // 提交按钮，用于启动另一个活动
+//        Button submitButton = findViewById(R.id.Attribute_queries);
+//        submitButton.setOnClickListener(v -> {
+//            Intent intent = new Intent(Main.this, Attribute_select.class);
+//            startActivityForResult(intent, 1);
+//        });
 
         // 加载图层按钮，可以添加加载图层的代码
         Button loadLayerButton = findViewById(R.id.Load_layer);

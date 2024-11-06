@@ -11,12 +11,14 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.PopupMenu;
 import android.widget.RelativeLayout;
 import android.widget.TableLayout;
 import android.widget.Toast;
@@ -32,15 +34,19 @@ import com.esri.arcgisruntime.data.QueryParameters;
 import com.esri.arcgisruntime.data.ShapefileFeatureTable;
 import com.esri.arcgisruntime.geometry.Envelope;
 import com.esri.arcgisruntime.geometry.GeometryEngine;
+import com.esri.arcgisruntime.geometry.GeometryType;
+import com.esri.arcgisruntime.geometry.Point;
 import com.esri.arcgisruntime.layers.FeatureLayer;
 import com.esri.arcgisruntime.layers.Layer;
 import com.esri.arcgisruntime.loadable.LoadStatus;
 import com.esri.arcgisruntime.mapping.ArcGISMap;
 import com.esri.arcgisruntime.mapping.view.BackgroundGrid;
+import com.esri.arcgisruntime.mapping.view.DefaultMapViewOnTouchListener;
 import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleFillSymbol;
 import com.esri.arcgisruntime.symbology.SimpleLineSymbol;
 import com.esri.arcgisruntime.symbology.SimpleRenderer;
+import com.example.arcgistest2.editor.FeatureEditor;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.navigation.NavigationView;
 import com.google.android.material.textfield.TextInputEditText;
@@ -65,6 +71,14 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
 import com.esri.arcgisruntime.geometry.Geometry;
+
+import com.example.arcgistest2.layer.LayerManager;
+
+import android.content.CursorLoader;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.OpenableColumns;
 
 public class Main extends AppCompatActivity {
 
@@ -137,6 +151,16 @@ public class Main extends AppCompatActivity {
         new LayerConfig("测试数据", "测试数据", Color.GREEN, 1.0f, Color.argb(50, 0, 255, 0))
     );
 
+    // 在类的开头添加
+    private FeatureEditor featureEditor;
+    private boolean isDrawing = false;
+
+    // 在 Main 类中添加 LayerManager
+    private LayerManager layerManager;
+
+    // 在类的开头添加常量
+    private static final int PICK_SHAPEFILE_REQUEST = 1001;
+
     // onCreate 方法，当活动创建时调用
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -181,6 +205,12 @@ public class Main extends AppCompatActivity {
         handlePermission();
         copyShapefilesToInternalStorage(this);
 
+        // 初始化图层管理器
+        layerManager = new LayerManager(this, mMapView, map);
+
+        // 初始化要素编辑器
+        featureEditor = new FeatureEditor(mMapView, this);
+
         // 加载初始图层
         loadInitialLayers();
     }
@@ -208,9 +238,8 @@ public class Main extends AppCompatActivity {
 
         loadLayerButton.setOnClickListener(v -> {
             animateButton(v);
-            String searchText = searchEditText.getText().toString();
-            // 实现加载图层的逻辑
-            loadLayer();
+            // 显示选择对话框
+            showLoadLayerDialog();
         });
     }
 
@@ -332,14 +361,83 @@ public class Main extends AppCompatActivity {
         MaterialButton templateButton = findViewById(R.id.yaosumoban);
         MaterialButton editToolButton = findViewById(R.id.yaosubianjigongju);
 
+        // 创建要素模板菜单
+        PopupMenu templateMenu = new PopupMenu(this, templateButton);
+        templateMenu.getMenu().add("点要素");
+        templateMenu.getMenu().add("线要素");
+        templateMenu.getMenu().add("面要素");
+
         templateButton.setOnClickListener(v -> {
             animateButton(v);
-            // 实现要素模板功能
+            templateMenu.show();
         });
+
+        templateMenu.setOnMenuItemClickListener(item -> {
+            GeometryType geometryType;
+            switch (item.getTitle().toString()) {
+                case "点要素":
+                    geometryType = GeometryType.POINT;
+                    break;
+                case "线要素":
+                    geometryType = GeometryType.POLYLINE;
+                    break;
+                case "面要素":
+                    geometryType = GeometryType.POLYGON;
+                    break;
+                default:
+                    return false;
+            }
+            
+            // 创建新的要素图层
+            String layerName = "新建" + item.getTitle() + System.currentTimeMillis();
+            featureEditor.createNewFeatureLayer(geometryType, layerName);
+            return true;
+        });
+
+        // 创建编辑工具菜单
+        PopupMenu editMenu = new PopupMenu(this, editToolButton);
+        editMenu.getMenu().add("绘制");
+        editMenu.getMenu().add("完成");
+        editMenu.getMenu().add("取消");
+        editMenu.getMenu().add("保存");
 
         editToolButton.setOnClickListener(v -> {
             animateButton(v);
-            // 实现要素编辑工具功能
+            editMenu.show();
+        });
+
+        editMenu.setOnMenuItemClickListener(item -> {
+            switch (item.getTitle().toString()) {
+                case "绘制":
+                    startDrawing();
+                    break;
+                case "完成":
+                    completeDrawing();
+                    break;
+                case "取消":
+                    cancelDrawing();
+                    break;
+                case "保存":
+                    saveFeatures();
+                    break;
+            }
+            return true;
+        });
+
+        // 设置地图点击事件
+        mMapView.setOnTouchListener(new DefaultMapViewOnTouchListener(this, mMapView) {
+            @Override
+            public boolean onSingleTapConfirmed(MotionEvent e) {
+                if (isDrawing) {
+                    android.graphics.Point screenPoint = new android.graphics.Point(
+                        Math.round(e.getX()),
+                        Math.round(e.getY()));
+                    Point mapPoint = mMapView.screenToLocation(screenPoint);
+                    featureEditor.addPoint(mapPoint);
+                    return true;
+                }
+                return super.onSingleTapConfirmed(e);
+            }
         });
     }
 
@@ -450,6 +548,9 @@ public class Main extends AppCompatActivity {
         if (mMapView != null) {
             mMapView.dispose();
         }
+        if (layerManager != null) {
+            layerManager.dispose();
+        }
         super.onDestroy();
     }
 
@@ -457,12 +558,11 @@ public class Main extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK && requestCode == 1) {
-            String fieldName = data.getStringExtra("fieldName");
-            String fieldValue = data.getStringExtra("fieldValue");
-
-            // 高亮显示符合条件的要素
-            highlightFeatures(fieldName, fieldValue);
+        
+        if (requestCode == PICK_SHAPEFILE_REQUEST && resultCode == RESULT_OK) {
+            if (data != null && data.getData() != null) {
+                importShapefile(data.getData());
+            }
         }
     }
 
@@ -652,28 +752,31 @@ public class Main extends AppCompatActivity {
 
     // 加载初始图层
     private void loadInitialLayers() {
-        try {
-            // 按照预定义顺序加载图层
-            for (LayerConfig config : defaultLayers) {
-                String shapefilePath = getInternalStorageFilePath(this, config.fileName + ".shp");
-                File file = new File(shapefilePath);
-                if (!file.exists()) {
-                    Log.e(TAG, String.format("%s文件不存在: %s", config.displayName, shapefilePath));
-                    continue;
+        for (LayerConfig config : defaultLayers) {
+            String shapefilePath = getInternalStorageFilePath(this, config.fileName + ".shp");
+            layerManager.loadShapefileLayer(shapefilePath, new LayerManager.LayerLoadCallback() {
+                @Override
+                public void onSuccess(FeatureLayer layer) {
+                    featureLayers.add(layer);
+                    layerNames.add(config.displayName);
+                    layerListAdapter.notifyDataSetChanged();
+                    
+                    // 默认选中图层
+                    ListView layerListView = findViewById(R.id.layerListView);
+                    layerListView.setItemChecked(layerNames.size() - 1, true);
+                    
+                    // 如果是第一个图层，缩放到其范围
+                    if (featureLayers.size() == 1) {
+                        layerManager.zoomToLayer(layer);
+                    }
                 }
 
-                // 检查必要文件
-                String basePath = shapefilePath.substring(0, shapefilePath.length() - 4);
-                if (!checkRequiredFiles(basePath)) {
-                    Log.e(TAG, String.format("%s数据文件不完整", config.displayName));
-                    continue;
+                @Override
+                public void onError(String error) {
+                    Log.e(TAG, error);
+                    Toast.makeText(Main.this, error, Toast.LENGTH_SHORT).show();
                 }
-
-                loadShapefileLayer(shapefilePath, config);
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "加载初始图层失败: " + e.getMessage());
-            Toast.makeText(this, "加载初始图层失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            });
         }
     }
 
@@ -823,6 +926,194 @@ public class Main extends AppCompatActivity {
         runOnUiThread(() -> {
             Toast.makeText(this, layerName + ": " + errorMessage, Toast.LENGTH_SHORT).show();
         });
+    }
+
+    private void startDrawing() {
+        if (featureEditor.getCurrentGeometryType() != null) {
+            isDrawing = true;
+            featureEditor.startEditing(featureEditor.getCurrentGeometryType());
+            Toast.makeText(this, "开始绘制", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "请先选择要素类型", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void completeDrawing() {
+        if (isDrawing) {
+            featureEditor.completeDrawing();
+            isDrawing = false;
+            Toast.makeText(this, "绘制完成", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void cancelDrawing() {
+        if (isDrawing) {
+            featureEditor.stopEditing();
+            isDrawing = false;
+            Toast.makeText(this, "取消绘制", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void saveFeatures() {
+        String fileName = "编辑要素_" + System.currentTimeMillis();
+        featureEditor.saveAsShapefile(fileName);
+        Toast.makeText(this, "保存为: " + fileName + ".shp", Toast.LENGTH_SHORT).show();
+    }
+
+    // 添加显示加载对话框的方法
+    private void showLoadLayerDialog() {
+        String[] options = {"从资产加载", "从文件导入"};
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("选择加载方式")
+               .setItems(options, (dialog, which) -> {
+                   if (which == 0) {
+                       // 从资产加载
+                       String searchText = searchEditText.getText().toString();
+                       if (!searchText.isEmpty()) {
+                           loadLayerFromAssets(searchText);
+                       } else {
+                           Toast.makeText(this, "请输入图层名称", Toast.LENGTH_SHORT).show();
+                       }
+                   } else {
+                       // 从文件导入
+                       openFilePicker();
+                   }
+               });
+        builder.show();
+    }
+
+    // 添加打开文件选择器的方法
+    private void openFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        
+        try {
+            startActivityForResult(
+                Intent.createChooser(intent, "选择Shapefile文件"),
+                PICK_SHAPEFILE_REQUEST
+            );
+        } catch (android.content.ActivityNotFoundException ex) {
+            Toast.makeText(this, "请安装文件管理器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // 添加导入Shapefile的方法
+    private void importShapefile(Uri uri) {
+        try {
+            // 获取文件名
+            String fileName = getFileNameFromUri(uri);
+            if (!fileName.toLowerCase().endsWith(".shp")) {
+                Toast.makeText(this, "请选择.shp文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 创建临时目录
+            File tempDir = new File(getFilesDir(), "imported_layers");
+            if (!tempDir.exists()) {
+                tempDir.mkdirs();
+            }
+
+            // 复制所有相关文件
+            String baseName = fileName.substring(0, fileName.length() - 4);
+            String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
+            
+            for (String ext : extensions) {
+                // 修改URI中的文件扩展名
+                Uri fileUri = changeFileExtension(uri, ext);
+                if (fileUri != null) {
+                    File destFile = new File(tempDir, baseName + ext);
+                    copyFileFromUri(fileUri, destFile);
+                }
+            }
+
+            // 加载图层
+            String shapefilePath = new File(tempDir, fileName).getAbsolutePath();
+            layerManager.loadShapefileLayer(shapefilePath, new LayerManager.LayerLoadCallback() {
+                @Override
+                public void onSuccess(FeatureLayer layer) {
+                    featureLayers.add(layer);
+                    layerNames.add(baseName);
+                    layerListAdapter.notifyDataSetChanged();
+                    
+                    // 默认选中并缩放到新图层
+                    ListView layerListView = findViewById(R.id.layerListView);
+                    layerListView.setItemChecked(layerNames.size() - 1, true);
+                    layerManager.zoomToLayer(layer);
+                    
+                    Toast.makeText(Main.this, "图层导入成功", Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onError(String error) {
+                    Toast.makeText(Main.this, "导入失败: " + error, Toast.LENGTH_SHORT).show();
+                }
+            });
+
+        } catch (Exception e) {
+            Toast.makeText(this, "导入失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // 辅助方法：从Uri获取文件名
+    private String getFileNameFromUri(Uri uri) {
+        String result = null;
+        if (uri.getScheme().equals("content")) {
+            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (index >= 0) {
+                        result = cursor.getString(index);
+                    }
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.getPath();
+            int cut = result.lastIndexOf('/');
+            if (cut != -1) {
+                result = result.substring(cut + 1);
+            }
+        }
+        return result;
+    }
+
+    // 辅助方法：修改URI的文件扩展名
+    private Uri changeFileExtension(Uri originalUri, String newExtension) {
+        String originalPath = originalUri.getPath();
+        if (originalPath == null) return null;
+        
+        String newPath = originalPath.substring(0, originalPath.lastIndexOf(".")) + newExtension;
+        return Uri.parse(originalUri.toString().replace(originalPath, newPath));
+    }
+
+    // 辅助方法：从Uri复制文件
+    private void copyFileFromUri(Uri sourceUri, File destFile) throws IOException {
+        try (InputStream is = getContentResolver().openInputStream(sourceUri);
+             FileOutputStream fos = new FileOutputStream(destFile)) {
+            if (is == null) throw new IOException("Cannot open input stream");
+            
+            byte[] buffer = new byte[4096];
+            int length;
+            while ((length = is.read(buffer)) > 0) {
+                fos.write(buffer, 0, length);
+            }
+            fos.flush();
+        }
+    }
+
+    // 从资产加载图层的方法
+    private void loadLayerFromAssets(String layerName) {
+        LayerConfig config = new LayerConfig(
+            layerName,
+            layerName,
+            Color.GRAY,
+            1.0f,
+            Color.argb(50, 128, 128, 128)
+        );
+        String shapefilePath = getInternalStorageFilePath(this, layerName + ".shp");
+        loadShapefileLayer(shapefilePath, config);
     }
 }
 

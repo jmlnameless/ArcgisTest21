@@ -166,6 +166,14 @@
                                 android:text="图例"
                                 android:layout_marginStart="8dp"
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_zoom_to_layer"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="缩放至图层"
+                                android:layout_marginStart="8dp"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
                         </LinearLayout>
 
                         <!-- 修改图层列表部分 -->
@@ -305,6 +313,47 @@
                             android:layout_marginStart="8dp"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
 
+                        <RelativeLayout
+                            android:id="@+id/attribute_table_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tuchashuxing"
+                            android:visibility="gone"
+                            android:layout_marginTop="8dp">
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/search_input_layout"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginBottom="8dp"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/search_input"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:hint="输入搜索条件"/>
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <HorizontalScrollView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_below="@id/search_input_layout">
+
+                                <ScrollView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="200dp">
+
+                                    <TableLayout
+                                        android:id="@+id/attribute_table"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:background="@android:color/white"
+                                        android:stretchColumns="*"/>
+                                </ScrollView>
+                            </HorizontalScrollView>
+                        </RelativeLayout>
+
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -332,7 +381,7 @@
                         android:id="@+id/action3"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="要素编辑"
+                        android:text="素编辑"
                         style="@style/Widget.MaterialComponents.Button.TextButton"/>
 
                     <RelativeLayout

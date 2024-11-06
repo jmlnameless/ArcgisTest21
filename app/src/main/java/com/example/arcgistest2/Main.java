@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.MotionEvent;
@@ -21,6 +22,8 @@ import android.widget.ListView;
 import android.widget.PopupMenu;
 import android.widget.RelativeLayout;
 import android.widget.TableLayout;
+import android.widget.TableRow;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -31,6 +34,7 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import com.esri.arcgisruntime.concurrent.ListenableFuture;
 import com.esri.arcgisruntime.data.Feature;
 import com.esri.arcgisruntime.data.FeatureQueryResult;
+import com.esri.arcgisruntime.data.Field;
 import com.esri.arcgisruntime.data.QueryParameters;
 import com.esri.arcgisruntime.data.ShapefileFeatureTable;
 import com.esri.arcgisruntime.geometry.Envelope;
@@ -60,6 +64,7 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -84,6 +89,15 @@ import android.provider.OpenableColumns;
 import android.provider.MediaStore;
 
 import androidx.documentfile.provider.DocumentFile;
+
+import android.text.Editable;
+import android.text.TextWatcher;
+
+import android.content.ContentResolver;
+
+import android.content.ContentUris;
+
+import android.os.Environment;
 
 public class Main extends AppCompatActivity {
 
@@ -169,19 +183,156 @@ public class Main extends AppCompatActivity {
     // 在类的开头添加权限请求码
     private static final int PERMISSION_REQUEST_CODE = 1000;
 
+    // 在类的开头添加权限相关常量
+    private static final String[] REQUIRED_PERMISSIONS_BELOW_33 = {
+        Manifest.permission.READ_EXTERNAL_STORAGE,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    };
+
+    private static final String[] REQUIRED_PERMISSIONS_33_AND_ABOVE = {
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
+        Manifest.permission.READ_MEDIA_AUDIO,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    };
+
     // onCreate 方法，当活动创建时调用
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.index);
+        
+        // 检查权限
+        if (!checkPermissions()) {
+            showPermissionDialog();
+        } else {
+            initializeApp();
+        }
+    }
 
+    // 修改权限对话框显示方法
+    private void showPermissionDialog() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("需要必要权限")
+            .setMessage("应用需要存储权限来访问地图文件，位置权限来获取当前位置。")
+            .setPositiveButton("授予权限", (dialogInterface, i) -> {
+                dialogInterface.dismiss(); // 关闭对话框
+                requestPermissions(); // 请求权限
+            })
+            .setNegativeButton("退出", (dialogInterface, i) -> {
+                dialogInterface.dismiss(); // 关闭对话框
+                finish(); // 退出应用
+            })
+            .setCancelable(false)
+            .create();
+        
+        dialog.show();
+    }
+
+    // 修改权限请求结果处理方法
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                         @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean allGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+            
+            if (allGranted) {
+                // 权限都已授予，初始化应用
+                initializeApp();
+                // 复制文件和加载图层
+                copyShapefilesToInternalStorage(this);
+                loadInitialLayers();
+            } else {
+                // 如果权限被拒绝，显示设置对话框
+                showSettingsDialog();
+            }
+        }
+    }
+
+    // 添加设置对话框显示方法
+    private void showSettingsDialog() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("权限被拒绝")
+            .setMessage("请在设置中手动授予所需权限，否则应用将无法正常工作。")
+            .setPositiveButton("去设置", (dialogInterface, i) -> {
+                dialogInterface.dismiss(); // 关闭对话框
+                // 打开应用设置页面
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                intent.setData(uri);
+                startActivity(intent);
+                finish();
+            })
+            .setNegativeButton("退出", (dialogInterface, i) -> {
+                dialogInterface.dismiss(); // 关闭对话框
+                finish(); // 退出应用
+            })
+            .setCancelable(false)
+            .create();
+        
+        dialog.show();
+    }
+
+    // 修改权限检查方法
+    private boolean checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11及以上需要所有文件访问权限
+            return Environment.isExternalStorageManager();
+        } else {
+            boolean hasReadPermission = ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            boolean hasWritePermission = ActivityCompat.checkSelfPermission(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            return hasReadPermission && hasWritePermission;
+        }
+    }
+
+    // 修改权限请求方法
+    private void requestPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11及以上请求所有文件访问权限
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.addCategory("android.intent.category.DEFAULT");
+                intent.setData(Uri.parse(String.format("package:%s", getPackageName())));
+                startActivityForResult(intent, 2296);
+            } catch (Exception e) {
+                Intent intent = new Intent();
+                intent.setAction(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                startActivityForResult(intent, 2296);
+            }
+        } else {
+            // Android 10及以下请求传统存储权限
+            ActivityCompat.requestPermissions(this,
+                new String[] {
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                },
+                PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    // 将原来onCreate中的初始化代码移到这个方法中
+    private void initializeApp() {
+        setContentView(R.layout.index);
+        
         // 初始化地图视图
         mMapView = findViewById(R.id.mapView);
         
         // 初始化地图
         map = new ArcGISMap();
         mMapView.setMap(map);
-
+        
         // 初始化搜索框
         searchEditText = findViewById(R.id.editTextText);
 
@@ -331,33 +482,48 @@ public class Main extends AppCompatActivity {
             }
         });
 
+        MaterialButton zoomToLayerButton = findViewById(R.id.btn_zoom_to_layer);
+        zoomToLayerButton.setOnClickListener(v -> {
+            animateButton(v);
+            zoomToSelectedLayers();
+        });
+
         // 修改图层列表点击事件
         ListView layerListView = findViewById(R.id.layerListView);
         layerListView.setOnItemClickListener((parent, view, position, id) -> {
-            Log.d(TAG, "图层列表项被点击: " + position);
             FeatureLayer layer = featureLayers.get(position);
             boolean isChecked = layerListView.isItemChecked(position);
             layer.setVisible(isChecked);
-            
-            // 如果图层被选中，立即缩放到该图层
-            if (isChecked) {
-                zoomToLayerExtent(layer);
-            }
         });
     }
 
     private void setupAttributeQuery() {
-        MaterialButton mapQueryButton = findViewById(R.id.tuchashuxing);
         MaterialButton attributeQueryButton = findViewById(R.id.shuxingchaxun);
-
-        mapQueryButton.setOnClickListener(v -> {
-            animateButton(v);
-            // 实现图查属性功能
-        });
-
+        View attributeTableContainer = findViewById(R.id.attribute_table_container);
+        TextInputEditText searchInput = findViewById(R.id.search_input);
+        
         attributeQueryButton.setOnClickListener(v -> {
             animateButton(v);
-            // 实属性查询功能
+            if (attributeTableContainer.getVisibility() == View.VISIBLE) {
+                attributeTableContainer.setVisibility(View.GONE);
+            } else {
+                showAttributeTable();
+                attributeTableContainer.setVisibility(View.VISIBLE);
+            }
+        });
+
+        // 添加搜索功能
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterAttributeTable(s.toString());
+            }
         });
     }
 
@@ -372,30 +538,41 @@ public class Main extends AppCompatActivity {
         templateMenu.getMenu().add("面要素");
 
         templateButton.setOnClickListener(v -> {
-            animateButton(v);
-            templateMenu.show();
+            try {
+                animateButton(v);
+                templateMenu.show();
+            } catch (Exception e) {
+                Log.e(TAG, "显示要素模板菜单失败: " + e.getMessage());
+                Toast.makeText(this, "显示要素模板菜单失败", Toast.LENGTH_SHORT).show();
+            }
         });
 
         templateMenu.setOnMenuItemClickListener(item -> {
-            GeometryType geometryType;
-            switch (item.getTitle().toString()) {
-                case "点要素":
-                    geometryType = GeometryType.POINT;
-                    break;
-                case "线要素":
-                    geometryType = GeometryType.POLYLINE;
-                    break;
-                case "面要素":
-                    geometryType = GeometryType.POLYGON;
-                    break;
-                default:
-                    return false;
+            try {
+                GeometryType geometryType;
+                switch (item.getTitle().toString()) {
+                    case "点要素":
+                        geometryType = GeometryType.POINT;
+                        break;
+                    case "线要素":
+                        geometryType = GeometryType.POLYLINE;
+                        break;
+                    case "面要素":
+                        geometryType = GeometryType.POLYGON;
+                        break;
+                    default:
+                        return false;
+                }
+                
+                // 创建新的要素图层
+                String layerName = "新建" + item.getTitle() + System.currentTimeMillis();
+                featureEditor.createNewFeatureLayer(geometryType, layerName);
+                return true;
+            } catch (Exception e) {
+                Log.e(TAG, "创建要素图层失败: " + e.getMessage());
+                Toast.makeText(this, "创建要素图层失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                return false;
             }
-            
-            // 创建新的要素图层
-            String layerName = "新建" + item.getTitle() + System.currentTimeMillis();
-            featureEditor.createNewFeatureLayer(geometryType, layerName);
-            return true;
         });
 
         // 创建编辑工具菜单
@@ -406,26 +583,53 @@ public class Main extends AppCompatActivity {
         editMenu.getMenu().add("保存");
 
         editToolButton.setOnClickListener(v -> {
-            animateButton(v);
-            editMenu.show();
+            try {
+                animateButton(v);
+                editMenu.show();
+            } catch (Exception e) {
+                Log.e(TAG, "显示编辑工具菜单失败: " + e.getMessage());
+                Toast.makeText(this, "显示编辑工具菜单失败", Toast.LENGTH_SHORT).show();
+            }
         });
 
         editMenu.setOnMenuItemClickListener(item -> {
-            switch (item.getTitle().toString()) {
-                case "绘制":
-                    startDrawing();
-                    break;
-                case "完成":
-                    completeDrawing();
-                    break;
-                case "取消":
-                    cancelDrawing();
-                    break;
-                case "保存":
-                    saveFeatures();
-                    break;
+            try {
+                switch (item.getTitle().toString()) {
+                    case "绘制":
+                        if (featureEditor.getCurrentGeometryType() != null) {
+                            isDrawing = true;
+                            featureEditor.startEditing(featureEditor.getCurrentGeometryType());
+                            Toast.makeText(this, "开始绘制", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(this, "请先选择要素类型", Toast.LENGTH_SHORT).show();
+                        }
+                        break;
+                    case "完成":
+                        if (isDrawing) {
+                            featureEditor.completeDrawing();
+                            isDrawing = false;
+                            Toast.makeText(this, "完成绘制", Toast.LENGTH_SHORT).show();
+                        }
+                        break;
+                    case "取消":
+                        if (isDrawing) {
+                            featureEditor.stopEditing();
+                            isDrawing = false;
+                            Toast.makeText(this, "取消绘制", Toast.LENGTH_SHORT).show();
+                        }
+                        break;
+                    case "保存":
+                        String fileName = "编辑要素_" + System.currentTimeMillis();
+                        featureEditor.saveAsShapefile(fileName);
+                        Toast.makeText(this, "已保存为: " + fileName + ".shp", Toast.LENGTH_SHORT).show();
+                        break;
+                }
+                return true;
+            } catch (Exception e) {
+                Log.e(TAG, "执行编辑操作失败: " + e.getMessage());
+                Toast.makeText(this, "执行编辑操作失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                return false;
             }
-            return true;
         });
 
         // 设置地图点击事件
@@ -536,6 +740,10 @@ public class Main extends AppCompatActivity {
         if (mMapView != null) {
             mMapView.pause();
         }
+        if (featureEditor != null && featureEditor.isEditing()) {
+            featureEditor.stopEditing();
+            isDrawing = false;
+        }
         super.onPause();
     }
 
@@ -555,6 +763,9 @@ public class Main extends AppCompatActivity {
         if (layerManager != null) {
             layerManager.dispose();
         }
+        if (featureEditor != null && featureEditor.isEditing()) {
+            featureEditor.stopEditing();
+        }
         super.onDestroy();
     }
 
@@ -566,6 +777,18 @@ public class Main extends AppCompatActivity {
         if (requestCode == PICK_SHAPEFILE_REQUEST && resultCode == RESULT_OK) {
             if (data != null && data.getData() != null) {
                 importShapefile(data.getData());
+            }
+        }
+        if (requestCode == 2296) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (Environment.isExternalStorageManager()) {
+                    // 权限已授予，初始化应用
+                    initializeApp();
+                    copyShapefilesToInternalStorage(this);
+                    loadInitialLayers();
+                } else {
+                    showSettingsDialog();
+                }
             }
         }
     }
@@ -634,10 +857,10 @@ public class Main extends AppCompatActivity {
 
     // 处理查询结果并高亮显示要素
     private void highlightFeaturesFromResult(FeatureQueryResult result) {
-        // 创建一个列表来存储查询到的要素
+        // 创建一个列表来储查询到的要素
         List<Feature> features = new ArrayList<>();
 
-        // 遍历查询结果，并将要素添加到列表中
+        // 遍历查询结果，并将要素加到列表中
         for (Feature feature : result) {
             features.add(feature);
         }
@@ -662,23 +885,10 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 处理权限请求
+    // 修改权限处理方法
     private void handlePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13及以上版本
-            String[] permissions = {
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO
-            };
-            requestPermissions(permissions);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 6.0到12的版本
-            String[] permissions = {
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            };
-            requestPermissions(permissions);
+        if (!checkPermissions()) {
+            requestPermissions();
         }
     }
 
@@ -699,58 +909,35 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 添加权限请求结果处理
-    @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
-            }
-            
-            if (allGranted) {
-                // 权限都已授予，继续初始化
-                copyShapefilesToInternalStorage(this);
-                loadInitialLayers();
-            } else {
-                // 权限被拒绝
-                Toast.makeText(this, "需要存储权限才能正常使用应用", 
-                    Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
     // 修改复制文件的方法
     public boolean copyAssetToInternalStorage(Context context, String assetName, String destFileName) {
         if (destFileName == null) {
             destFileName = assetName;
         }
 
-        File fileDir = context.getFilesDir();
-        File destFile = new File(fileDir, destFileName);
-
-        // 如果文件已存在，先删除
-        if (destFile.exists()) {
-            destFile.delete();
+        File fileDir = new File(context.getFilesDir(), "shapefiles");
+        if (!fileDir.exists()) {
+            fileDir.mkdirs();
         }
 
-        try (InputStream in = context.getAssets().open(assetName);
-             FileOutputStream fos = new FileOutputStream(destFile)) {
-            byte[] buffer = new byte[8192];
-            int length;
-            while ((length = in.read(buffer)) > 0) {
-                fos.write(buffer, 0, length);
+        File destFile = new File(fileDir, destFileName);
+
+        try {
+            if (destFile.exists()) {
+                destFile.delete();
             }
-            fos.flush();
-            Log.d(TAG, "成功复制文件: " + assetName + " 到 " + destFile.getAbsolutePath());
-            Log.d(TAG, "文件大小: " + destFile.length() + " bytes");
-            return true;
+
+            try (InputStream in = context.getAssets().open(assetName);
+                 FileOutputStream fos = new FileOutputStream(destFile)) {
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = in.read(buffer)) > 0) {
+                    fos.write(buffer, 0, length);
+                }
+                fos.flush();
+                Log.d(TAG, "成功复制文件: " + assetName + " 到 " + destFile.getAbsolutePath());
+                return true;
+            }
         } catch (IOException e) {
             Log.e(TAG, "复制文件失败: " + assetName + ", 错误: " + e.getMessage());
             e.printStackTrace();
@@ -781,7 +968,7 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 设置 Shapefile ��征表
+    // 设置 Shapefile 征表
     private void setupShapefileFeatureTable(String shapefilePath) {
         ShapefileFeatureTable shapefileFeatureTable = new ShapefileFeatureTable(shapefilePath);
         shapefileFeatureTable.loadAsync();
@@ -834,7 +1021,7 @@ public class Main extends AppCompatActivity {
                     ListView layerListView = findViewById(R.id.layerListView);
                     layerListView.setItemChecked(layerNames.size() - 1, true);
                     
-                    // 如果是第一个图层，缩放到其范围
+                    // 如果是第一个图层，缩到其范围
                     if (featureLayers.size() == 1) {
                         layerManager.zoomToLayer(layer);
                     }
@@ -923,7 +1110,7 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 修改缩放到图层范围的方法
+    // 修改放到图层范围的方法
     private void zoomToLayerExtent(FeatureLayer layer) {
         if (layer != null && layer.getFullExtent() != null) {
             try {
@@ -1060,7 +1247,7 @@ public class Main extends AppCompatActivity {
         builder.show();
     }
 
-    // 添加打开文件选择器的方法
+    // 添加打开文件选择器的方
     private void openFilePicker() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("*/*");
@@ -1087,21 +1274,13 @@ public class Main extends AppCompatActivity {
                 return;
             }
 
-            // 获取实际文件路径
-            String actualPath = getActualPath(uri);
-            if (actualPath == null) {
-                Log.e(TAG, "无法获取文件路径");
+            // 使用 ContentResolver 处理文件
+            ContentResolver resolver = getContentResolver();
+            InputStream inputStream = resolver.openInputStream(uri);
+            if (inputStream == null) {
+                Toast.makeText(this, "无法读取文件", Toast.LENGTH_SHORT).show();
                 return;
             }
-            Log.d(TAG, "文件实际路径: " + actualPath);
-
-            File sourceFile = new File(actualPath);
-            File sourceDir = sourceFile.getParentFile();
-            if (!sourceDir.exists()) {
-                Log.e(TAG, "源文件目录不存在");
-                return;
-            }
-            Log.d(TAG, "源文件目录: " + sourceDir.getAbsolutePath());
 
             // 创建导入目录
             File importDir = new File(getFilesDir(), "imported_layers");
@@ -1109,73 +1288,49 @@ public class Main extends AppCompatActivity {
                 importDir.mkdirs();
             }
 
-            // 复制所有相关文件
+            // 复制文件到应用私有目录
+            File destFile = new File(importDir, fileName);
+            try (FileOutputStream outputStream = new FileOutputStream(destFile)) {
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = inputStream.read(buffer)) > 0) {
+                    outputStream.write(buffer, 0, length);
+                }
+            }
+
+            // 处理相关文件（.shx, .dbf, .prj）
             String baseName = fileName.substring(0, fileName.length() - 4);
-            String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
-            boolean allFilesCopied = true;
-            List<String> missingFiles = new ArrayList<>();
-
+            String[] extensions = {".shx", ".dbf", ".prj"};
             for (String ext : extensions) {
-                String sourceFileName = baseName + ext;
-                File sourceFileWithExt = new File(sourceDir, sourceFileName);
-                Log.d(TAG, "检查文件: " + sourceFileWithExt.getAbsolutePath());
-                
-                if (sourceFileWithExt.exists() && sourceFileWithExt.isFile()) {
-                    File destFile = new File(importDir, sourceFileName);
-                    try {
-                        copyFile(Uri.fromFile(sourceFileWithExt), destFile);
-                        Log.d(TAG, "已复制: " + sourceFileName);
-                    } catch (IOException e) {
-                        Log.e(TAG, "复制文件失败: " + sourceFileName + " - " + e.getMessage());
-                        allFilesCopied = false;
-                        missingFiles.add(sourceFileName);
+                Uri relatedFileUri = findRelatedFile(uri, baseName + ext);
+                if (relatedFileUri != null) {
+                    File destRelatedFile = new File(importDir, baseName + ext);
+                    try (InputStream relatedInputStream = resolver.openInputStream(relatedFileUri);
+                         FileOutputStream relatedOutputStream = new FileOutputStream(destRelatedFile)) {
+                        if (relatedInputStream != null) {
+                            byte[] buffer = new byte[8192];
+                            int length;
+                            while ((length = relatedInputStream.read(buffer)) > 0) {
+                                relatedOutputStream.write(buffer, 0, length);
+                            }
+                        }
                     }
-                } else {
-                    Log.e(TAG, "文件不存在: " + sourceFileWithExt.getAbsolutePath());
-                    allFilesCopied = false;
-                    missingFiles.add(sourceFileName);
                 }
             }
 
-            if (!allFilesCopied) {
-                Toast.makeText(this, "文件缺失: " + String.join(", ", missingFiles), Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            // 加图层
-            String shapefilePath = new File(importDir, fileName).getAbsolutePath();
-            Log.d(TAG, "开始加载Shapefile: " + shapefilePath);
-
-            layerManager.loadShapefileLayer(shapefilePath, new LayerManager.LayerLoadCallback() {
-                @Override
-                public void onSuccess(FeatureLayer layer) {
-                    featureLayers.add(layer);
-                    layerNames.add(baseName);
-                    layerListAdapter.notifyDataSetChanged();
-
-                    // 默认选中并缩放到新图层
-                    ListView layerListView = findViewById(R.id.layerListView);
-                    layerListView.setItemChecked(layerNames.size() - 1, true);
-                    layerManager.zoomToLayer(layer);
-                    
-                    Toast.makeText(Main.this, "图层导入成功", Toast.LENGTH_SHORT).show();
-                }
-
-                @Override
-                public void onError(String error) {
-                    Log.e(TAG, "图层加载失败: " + error);
-                    Toast.makeText(Main.this, "图层加载失败: " + error, Toast.LENGTH_SHORT).show();
-                }
-            });
+            // 加载图层
+            String shapefilePath = destFile.getAbsolutePath();
+            loadShapefileLayer(shapefilePath, new LayerConfig(
+                baseName, baseName, Color.GRAY, 1.0f, Color.argb(50, 128, 128, 128)
+            ));
 
         } catch (Exception e) {
-            Log.e(TAG, "导入失败: " + e.getMessage());
-            e.printStackTrace();
-            Toast.makeText(this, "导入失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "导入文件失败: " + e.getMessage());
+            Toast.makeText(this, "导入文件失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
-    // 添加文件路径获取方法
+    // 添加文件路径获取方��
     private String getActualPath(Uri uri) {
         try {
             Log.d(TAG, "尝试获取文件路径，URI: " + uri.toString());
@@ -1185,7 +1340,7 @@ public class Main extends AppCompatActivity {
             }
             
             if ("content".equals(uri.getScheme())) {
-                // 对于 Downloads 目录的特殊处理
+                // 对于 Downloads 目录的殊处理
                 if (uri.toString().contains("com.android.providers.downloads.documents")) {
                     String path = uri.getPath();
                     if (path != null && path.contains("raw:")) {
@@ -1262,7 +1417,7 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 从资产加载图层的方法
+    // 从产加载图层的方法
     private void loadLayerFromAssets(String layerName) {
         LayerConfig config = new LayerConfig(
             layerName,
@@ -1354,6 +1509,331 @@ public class Main extends AppCompatActivity {
                     String layerName = layerNames.get(featureLayers.indexOf(finalLargestLayer));
                     Toast.makeText(this, "已缩放至: " + layerName, Toast.LENGTH_SHORT).show();
                 });
+        }
+    }
+
+    // 添加缩放至选中图层的方法
+    private void zoomToSelectedLayers() {
+        ListView layerListView = findViewById(R.id.layerListView);
+        List<FeatureLayer> selectedLayers = new ArrayList<>();
+        
+        for (int i = 0; i < featureLayers.size(); i++) {
+            if (layerListView.isItemChecked(i)) {
+                selectedLayers.add(featureLayers.get(i));
+            }
+        }
+
+        if (selectedLayers.isEmpty()) {
+            Toast.makeText(this, "请先选择要缩放的图层", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 计算所有图层中图层的总范围
+        Envelope totalExtent = null;
+        for (FeatureLayer layer : selectedLayers) {
+            if (layer.getFullExtent() != null) {
+                if (totalExtent == null) {
+                    totalExtent = layer.getFullExtent();
+                } else {
+                    totalExtent = GeometryEngine.union(totalExtent, layer.getFullExtent()).getExtent();
+                }
+            }
+        }
+
+        if (totalExtent != null) {
+            // 添加缓冲区
+            Envelope bufferedExtent = new Envelope(
+                totalExtent.getXMin() - totalExtent.getWidth() * 0.1,
+                totalExtent.getYMin() - totalExtent.getHeight() * 0.1,
+                totalExtent.getXMax() + totalExtent.getWidth() * 0.1,
+                totalExtent.getYMax() + totalExtent.getHeight() * 0.1,
+                totalExtent.getSpatialReference()
+            );
+            mMapView.setViewpointGeometryAsync(bufferedExtent, 1.0);
+        }
+    }
+
+    // 添加显示属性表的方法
+    private void showAttributeTable() {
+        TableLayout attributeTable = findViewById(R.id.attribute_table);
+        attributeTable.removeAllViews();
+
+        // 获取选中的图层
+        ListView layerListView = findViewById(R.id.layerListView);
+        final FeatureLayer selectedLayer = getSelectedLayer(layerListView);
+
+        if (selectedLayer == null) {
+            Toast.makeText(this, "请先选择一个图层", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 查询图层的所有要素
+        QueryParameters query = new QueryParameters();
+        query.setWhereClause("1=1");
+        
+        ListenableFuture<FeatureQueryResult> future = selectedLayer.getFeatureTable().queryFeaturesAsync(query);
+        future.addDoneListener(() -> {
+            try {
+                FeatureQueryResult result = future.get();
+                runOnUiThread(() -> {
+                    try {
+                        // 创建表头
+                        TableRow headerRow = new TableRow(this);
+                        for (Field field : result.getFields()) {
+                            TextView headerText = new TextView(this);
+                            headerText.setText(field.getName());
+                            headerText.setPadding(10, 10, 10, 10);
+                            headerText.setBackgroundColor(Color.LTGRAY);
+                            headerRow.addView(headerText);
+                        }
+                        attributeTable.addView(headerRow);
+
+                        // 添加数据行
+                        for (Feature feature : result) {
+                            TableRow row = new TableRow(this);
+                            row.setClickable(true);
+                            Map<String, Object> attributes = feature.getAttributes();
+                            
+                            for (Field field : result.getFields()) {
+                                TextView cellText = new TextView(this);
+                                cellText.setText(String.valueOf(attributes.get(field.getName())));
+                                cellText.setPadding(10, 10, 10, 10);
+                                row.addView(cellText);
+                            }
+
+                            // 设置行点击事件
+                            row.setOnClickListener(v -> {
+                                // 高亮显示选中的要素
+                                selectedLayer.clearSelection();
+                                selectedLayer.selectFeature(feature);
+                                
+                                // 缩放到要素
+                                if (feature.getGeometry() != null) {
+                                    Envelope extent = feature.getGeometry().getExtent();
+                                    Envelope bufferedExtent = new Envelope(
+                                        extent.getXMin() - extent.getWidth() * 0.1,
+                                        extent.getYMin() - extent.getHeight() * 0.1,
+                                        extent.getXMax() + extent.getWidth() * 0.1,
+                                        extent.getYMax() + extent.getHeight() * 0.1,
+                                        extent.getSpatialReference()
+                                    );
+                                    mMapView.setViewpointGeometryAsync(bufferedExtent, 1.0);
+                                }
+                            });
+
+                            attributeTable.addView(row);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "创建属性表失败: " + e.getMessage());
+                        Toast.makeText(this, "创建属性表失败", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "查询要素失败: " + e.getMessage());
+                runOnUiThread(() -> 
+                    Toast.makeText(this, "查询要素失败", Toast.LENGTH_SHORT).show()
+                );
+            }
+        });
+    }
+
+    // 添加获取选中图层的辅助方法
+    private FeatureLayer getSelectedLayer(ListView layerListView) {
+        for (int i = 0; i < featureLayers.size(); i++) {
+            if (layerListView.isItemChecked(i)) {
+                return featureLayers.get(i);
+            }
+        }
+        return null;
+    }
+
+    // 修改 filterAttributeTable 方法
+    private void filterAttributeTable(String searchText) {
+        // 添加空值检查
+        if (searchText == null || searchText.trim().isEmpty()) {
+            showAttributeTable(); // 显示所有数据
+            return;
+        }
+
+        // 获取选中的图层
+        ListView layerListView = findViewById(R.id.layerListView);
+        final FeatureLayer selectedLayer = getSelectedLayer(layerListView);
+
+        if (selectedLayer == null) return;
+
+        // 构建查询条件
+        QueryParameters query = new QueryParameters();
+        StringBuilder whereClause = new StringBuilder();
+        
+        // 获取图层的字段
+        List<Field> fields = selectedLayer.getFeatureTable().getFields();
+        boolean isFirst = true;
+        for (Field field : fields) {
+            // 根据字段类型构建查询条件
+            if (field.getFieldType() == Field.Type.OID || 
+                field.getFieldType() == Field.Type.INTEGER || 
+                field.getFieldType() == Field.Type.DOUBLE || 
+                field.getFieldType() == Field.Type.FLOAT || 
+                field.getFieldType() == Field.Type.SHORT || 
+                field.getFieldType() == Field.Type.TEXT) {  // 使用 TEXT 替代 STRING
+                if (!isFirst) {
+                    whereClause.append(" OR ");
+                }
+                whereClause.append("CAST(")
+                          .append(field.getName())
+                          .append(" AS TEXT) LIKE '%")
+                          .append(searchText)
+                          .append("%'");
+                isFirst = false;
+            }
+        }
+        
+        // 如果没有可查询的字段，返回
+        if (whereClause.length() == 0) {
+            Toast.makeText(this, "没有可查询的字段", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        query.setWhereClause(whereClause.toString());
+        
+        // 执行查询
+        ListenableFuture<FeatureQueryResult> future = 
+            selectedLayer.getFeatureTable().queryFeaturesAsync(query);
+        future.addDoneListener(() -> {
+            try {
+                final FeatureQueryResult result = future.get();
+                runOnUiThread(() -> updateAttributeTable(result, selectedLayer));
+            } catch (Exception e) {
+                Log.e(TAG, "查询失败: " + e.getMessage());
+                runOnUiThread(() -> 
+                    Toast.makeText(this, "查询失败: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                );
+            }
+        });
+    }
+
+    // 更新属性表显示
+    private void updateAttributeTable(FeatureQueryResult result, FeatureLayer layer) {
+        TableLayout attributeTable = findViewById(R.id.attribute_table);
+        attributeTable.removeAllViews();
+
+        try {
+            // 创建表头
+            TableRow headerRow = new TableRow(this);
+            for (Field field : result.getFields()) {
+                TextView headerText = new TextView(this);
+                headerText.setText(field.getName());
+                headerText.setPadding(10, 10, 10, 10);
+                headerText.setBackgroundColor(Color.LTGRAY);
+                headerRow.addView(headerText);
+            }
+            attributeTable.addView(headerRow);
+
+            // 添加数据行
+            for (Feature feature : result) {
+                TableRow row = new TableRow(this);
+                row.setClickable(true);
+                Map<String, Object> attributes = feature.getAttributes();
+                
+                for (Field field : result.getFields()) {
+                    TextView cellText = new TextView(this);
+                    cellText.setText(String.valueOf(attributes.get(field.getName())));
+                    cellText.setPadding(10, 10, 10, 10);
+                    row.addView(cellText);
+                }
+
+                // 设置行点击事件
+                row.setOnClickListener(v -> {
+                    // 高亮显示选中的要素
+                    layer.clearSelection();
+                    layer.selectFeature(feature);
+                    
+                    // 缩放到要素
+                    if (feature.getGeometry() != null) {
+                        Envelope extent = feature.getGeometry().getExtent();
+                        Envelope bufferedExtent = new Envelope(
+                            extent.getXMin() - extent.getWidth() * 0.1,
+                            extent.getYMin() - extent.getHeight() * 0.1,
+                            extent.getXMax() + extent.getWidth() * 0.1,
+                            extent.getYMax() + extent.getHeight() * 0.1,
+                            extent.getSpatialReference()
+                        );
+                        mMapView.setViewpointGeometryAsync(bufferedExtent, 1.0);
+                    }
+                });
+
+                attributeTable.addView(row);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "更新属性表失败: " + e.getMessage());
+            Toast.makeText(this, "更新属性表失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // 添加查找相关文件的方法
+    private Uri findRelatedFile(Uri originalUri, String targetFileName) {
+        try {
+            // 获取原始文件的目录路径
+            String originalPath = getActualPath(originalUri);
+            if (originalPath != null) {
+                File originalFile = new File(originalPath);
+                File parentDir = originalFile.getParentFile();
+                
+                if (parentDir != null && parentDir.exists()) {
+                    // 在同一目录下查找目标文件
+                    File targetFile = new File(parentDir, targetFileName);
+                    if (targetFile.exists()) {
+                        return Uri.fromFile(targetFile);
+                    }
+                }
+            }
+
+            // 如果通过直接路径未找到，尝试使用ContentResolver
+            if ("content".equals(originalUri.getScheme())) {
+                DocumentFile originalDoc = DocumentFile.fromSingleUri(this, originalUri);
+                if (originalDoc != null && originalDoc.getParentFile() != null) {
+                    DocumentFile parent = originalDoc.getParentFile();
+                    DocumentFile[] files = parent.listFiles();
+                    for (DocumentFile file : files) {
+                        if (file.getName() != null && file.getName().equalsIgnoreCase(targetFileName)) {
+                            return file.getUri();
+                        }
+                    }
+                }
+
+                // 尝试使用MediaStore查询
+                String selection = MediaStore.MediaColumns.DISPLAY_NAME + "=? AND " +
+                                 MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?";
+                String relativePath = originalPath != null ? 
+                    originalPath.substring(0, originalPath.lastIndexOf('/') + 1) : "%";
+                String[] selectionArgs = {targetFileName, relativePath + "%"};
+                
+                try (Cursor cursor = getContentResolver().query(
+                        MediaStore.Files.getContentUri("external"),
+                        null,
+                        selection,
+                        selectionArgs,
+                        null)) {
+                    
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int idColumn = cursor.getColumnIndex(MediaStore.MediaColumns._ID);
+                        if (idColumn != -1) {
+                            long id = cursor.getLong(idColumn);
+                            return ContentUris.withAppendedId(
+                                MediaStore.Files.getContentUri("external"), 
+                                id
+                            );
+                        }
+                    }
+                }
+            }
+
+            Log.d(TAG, "未找到相关文件: " + targetFileName);
+            return null;
+        } catch (Exception e) {
+            Log.e(TAG, "查找相关文件失败: " + e.getMessage());
+            e.printStackTrace();
+            return null;
         }
     }
 }

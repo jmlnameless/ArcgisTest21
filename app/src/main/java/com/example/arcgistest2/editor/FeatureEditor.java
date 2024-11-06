@@ -26,6 +26,7 @@ import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
 import com.esri.arcgisruntime.symbology.SimpleRenderer;
 import com.esri.arcgisruntime.symbology.Symbol;
 import com.example.arcgistest2.layer.LayerManager;
+import com.example.arcgistest2.utils.ShapefileCreator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -69,218 +70,45 @@ public class FeatureEditor {
     // 创建新的要素图层
     public void createNewFeatureLayer(GeometryType geometryType, String layerName) {
         try {
-            Log.d(TAG, "开始创建图层: " + layerName + ", 类型: " + geometryType);
+            // 使用ShapefileCreator创建Shapefile
+            boolean created = ShapefileCreator.createShapefile(context, layerName, geometryType);
             
-            // 设置当前编辑的几何类型（在创建文件之前）
-            currentGeometryType = geometryType;
+            if (!created) {
+                throw new Exception("创建Shapefile失败");
+            }
 
-            // 在后台线程创建文件
-            new Thread(() -> {
-                try {
-                    createShapefileFiles(layerName, geometryType);
+            // 获取创建的Shapefile路径
+            File shapefileDir = new File(context.getFilesDir(), "shapefiles");
+            String shapefilePath = new File(shapefileDir, layerName + ".shp").getAbsolutePath();
+
+            // 加载新创建的图层
+            ShapefileFeatureTable shapefileFeatureTable = new ShapefileFeatureTable(shapefilePath);
+            shapefileFeatureTable.loadAsync();
+            
+            shapefileFeatureTable.addDoneLoadingListener(() -> {
+                if (shapefileFeatureTable.getLoadStatus() == LoadStatus.LOADED) {
+                    FeatureLayer layer = new FeatureLayer(shapefileFeatureTable);
+                    editingLayer = layer;
+                    currentGeometryType = geometryType;
                     
-                    // 在主线程加载图层
-                    String path = new File(context.getFilesDir(), layerName + ".shp").getAbsolutePath();
-                    layerManager.loadShapefileLayer(path, new LayerManager.LayerLoadCallback() {
-                        @Override
-                        public void onSuccess(FeatureLayer layer) {
-                            editingLayer = layer;
-                            setLayerSymbol(layer, geometryType);
-                            Toast.makeText(context, "创建图层成功", Toast.LENGTH_SHORT).show();
-                        }
-
-                        @Override
-                        public void onError(String error) {
-                            Log.e(TAG, error);
-                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show();
-                        }
-                    });
-                } catch (IOException e) {
-                    Log.e(TAG, "创建Shapefile文件失败: " + e.getMessage());
-                    runOnUiThread(() -> Toast.makeText(context, "创建Shapefile文件失败", Toast.LENGTH_SHORT).show());
+                    // 设置图层符号
+                    setLayerSymbol(layer, geometryType);
+                    
+                    // 添加到地图
+                    mapView.getMap().getOperationalLayers().add(layer);
+                    
+                    // 通知用户
+                    Toast.makeText(context, "创建图层成功", Toast.LENGTH_SHORT).show();
+                } else {
+                    String error = shapefileFeatureTable.getLoadError().getMessage();
+                    Log.e(TAG, "加载图层失败: " + error);
+                    Toast.makeText(context, "加载图层失败: " + error, Toast.LENGTH_SHORT).show();
                 }
-            }).start();
+            });
+
         } catch (Exception e) {
-            Log.e(TAG, "创建要素图层失败: " + e.getMessage());
+            Log.e(TAG, "创建图层失败: " + e.getMessage());
             Toast.makeText(context, "创建图层失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // 创建Shapefile必要文件
-    private void createShapefileFiles(String layerName, GeometryType geometryType) throws IOException {
-        Log.d(TAG, "开始创建Shapefile文件: " + layerName);
-        
-        // 创建目录（如果不存在）
-        File directory = context.getFilesDir();
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-
-        // 创建.shp文件
-        File shpFile = new File(directory, layerName + ".shp");
-        createEmptyFile(shpFile);
-
-        // 创建.shx文件
-        File shxFile = new File(directory, layerName + ".shx");
-        createEmptyFile(shxFile);
-
-        // 创建.dbf文件并写入基本结构
-        File dbfFile = new File(directory, layerName + ".dbf");
-        createDBFFile(dbfFile);
-
-        // 创建.prj文件并写入坐标系信息
-        File prjFile = new File(directory, layerName + ".prj");
-        createPRJFile(prjFile);
-
-        Log.d(TAG, "所有文件创建完成");
-    }
-
-    // 创建空文件
-    private void createEmptyFile(File file) throws IOException {
-        if (!file.exists()) {
-            file.createNewFile();
-        }
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            // Shapefile文件头（100字节）
-            byte[] header = new byte[100];
-            
-            // 文件代码 (0x0000270a)
-            header[0] = (byte) 0x00;
-            header[1] = (byte) 0x00;
-            header[2] = (byte) 0x27;
-            header[3] = (byte) 0x0a;
-            
-            // 未使用的20字节
-            for (int i = 4; i < 24; i++) {
-                header[i] = (byte) 0x00;
-            }
-            
-            // 文件长度（初始为100字节）
-            int fileLength = 100;
-            header[24] = (byte) ((fileLength / 2) & 0xFF);
-            header[25] = (byte) (((fileLength / 2) >> 8) & 0xFF);
-            header[26] = (byte) (((fileLength / 2) >> 16) & 0xFF);
-            header[27] = (byte) (((fileLength / 2) >> 24) & 0xFF);
-            
-            // 版本
-            header[28] = (byte) 0x03;
-            header[29] = (byte) 0x00;
-            header[30] = (byte) 0x00;
-            header[31] = (byte) 0x00;
-            
-            // 几何类型
-            int shapeType;
-            switch (currentGeometryType) {
-                case POINT:
-                    shapeType = 1;
-                    break;
-                case POLYLINE:
-                    shapeType = 3;
-                    break;
-                case POLYGON:
-                    shapeType = 5;
-                    break;
-                default:
-                    shapeType = 0;
-            }
-            header[32] = (byte) (shapeType & 0xFF);
-            header[33] = (byte) ((shapeType >> 8) & 0xFF);
-            header[34] = (byte) ((shapeType >> 16) & 0xFF);
-            header[35] = (byte) ((shapeType >> 24) & 0xFF);
-            
-            // 边界框（初始为0）
-            double[] bbox = {0.0, 0.0, 0.0, 0.0}; // Xmin, Ymin, Xmax, Ymax
-            int offset = 36;
-            for (double value : bbox) {
-                long bits = Double.doubleToLongBits(value);
-                for (int i = 0; i < 8; i++) {
-                    header[offset + i] = (byte) ((bits >> (i * 8)) & 0xFF);
-                }
-                offset += 8;
-            }
-            
-            // Z范围（初始为0）
-            for (int i = 68; i < 84; i++) {
-                header[i] = (byte) 0x00;
-            }
-            
-            // M范围（初始为0）
-            for (int i = 84; i < 100; i++) {
-                header[i] = (byte) 0x00;
-            }
-            
-            fos.write(header);
-        }
-    }
-
-    // 创建DBF文件
-    private void createDBFFile(File file) throws IOException {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            // DBF文件头（32字节）
-            byte[] header = new byte[32];
-            
-            // 版本号 (0x03 for dBASE III)
-            header[0] = (byte) 0x03;
-            
-            // 最后更新日期（年月日）
-            java.util.Calendar cal = java.util.Calendar.getInstance();
-            header[1] = (byte) (cal.get(java.util.Calendar.YEAR) - 1900);
-            header[2] = (byte) (cal.get(java.util.Calendar.MONTH) + 1);
-            header[3] = (byte) cal.get(java.util.Calendar.DAY_OF_MONTH);
-            
-            // 记录数（初始为0）
-            header[4] = (byte) 0x00;
-            header[5] = (byte) 0x00;
-            header[6] = (byte) 0x00;
-            header[7] = (byte) 0x00;
-            
-            // 头部长��（包括字段描述符）
-            short headerLength = (short) (32 + 32 + 1);  // 头部 + 一个字段描述符 + 终止符
-            header[8] = (byte) (headerLength & 0xFF);
-            header[9] = (byte) ((headerLength >> 8) & 0xFF);
-            
-            // 记录长度（每个字段的长度总和 + 1）
-            header[10] = (byte) 11;  // ID字段长度为10 + 删除标记1字节
-            header[11] = (byte) 0x00;
-            
-            // 保留字节
-            for (int i = 12; i < 32; i++) {
-                header[i] = (byte) 0x00;
-            }
-            
-            fos.write(header);
-            
-            // 写入字段描述符
-            byte[] fieldDescriptor = new byte[32];
-            // ID字段
-            fieldDescriptor[0] = (byte) 'I';
-            fieldDescriptor[1] = (byte) 'D';
-            fieldDescriptor[2] = (byte) 0x00;
-            fieldDescriptor[3] = (byte) 'N';  // 数值类型
-            fieldDescriptor[4] = (byte) 0x00;  // 字段长度
-            fieldDescriptor[5] = (byte) 0x00;  // 字段位置
-            fieldDescriptor[6] = (byte) 0x00;  // 字段长度
-            fieldDescriptor[7] = (byte) 0x00;  // 字段小数位数
-            fieldDescriptor[16] = (byte) 10;   // 字段长度
-            fieldDescriptor[17] = (byte) 0;    // 小数位数
-            
-            fos.write(fieldDescriptor);
-            
-            // 写入终止符
-            fos.write((byte) 0x0D);
-            
-            // 写入文件结束标记
-            fos.write((byte) 0x1A);
-        }
-    }
-
-    // 创建PRJ文件
-    private void createPRJFile(File file) throws IOException {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            // WGS84坐标系的WKT字符串
-            String wkt = "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137.0,298.257223563]]," +
-                        "PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]]";
-            fos.write(wkt.getBytes());
         }
     }
 
@@ -353,9 +181,7 @@ public class FeatureEditor {
         }
 
         if (geometry != null && symbol != null) {
-            Graphic graphic = new Graphic();
-            graphic.setGeometry(geometry);
-            graphic.setSymbol(symbol);
+            Graphic graphic = new Graphic(geometry, symbol);
             tempGraphicsOverlay.getGraphics().add(graphic);
         }
 
@@ -365,9 +191,7 @@ public class FeatureEditor {
             Color.RED, 
             5);
         for (Point point : tempPoints) {
-            Graphic vertexGraphic = new Graphic();
-            vertexGraphic.setGeometry(point);
-            vertexGraphic.setSymbol(vertexSymbol);
+            Graphic vertexGraphic = new Graphic(point, vertexSymbol);
             tempGraphicsOverlay.getGraphics().add(vertexGraphic);
         }
     }
@@ -379,6 +203,9 @@ public class FeatureEditor {
         try {
             Geometry geometry = null;
             switch (currentGeometryType) {
+                case POINT:
+                    geometry = tempPoints.get(0);
+                    break;
                 case POLYLINE:
                     if (tempPoints.size() >= 2) {
                         geometry = createPolyline();
@@ -393,14 +220,14 @@ public class FeatureEditor {
             
             if (geometry != null) {
                 createFeature(geometry);
-                Toast.makeText(context, "要素创建成功", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(context, "无效的几何形状", Toast.LENGTH_SHORT).show();
             }
         } catch (Exception e) {
             Log.e(TAG, "创建要素失败: " + e.getMessage());
             Toast.makeText(context, "创建要素失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         } finally {
-            tempPoints.clear();
-            tempGraphicsOverlay.getGraphics().clear();
+            stopEditing();
         }
     }
 
@@ -520,7 +347,8 @@ public class FeatureEditor {
         
         Map<String, Object> attributes = new HashMap<>();
         // 添加必要的属性
-        attributes.put("ID", System.currentTimeMillis()); // 添加一个唯一标识符
+        attributes.put("ID", System.currentTimeMillis()); 
+        attributes.put("NAME", "要素_" + System.currentTimeMillis());
         
         Feature feature = editingLayer.getFeatureTable().createFeature(attributes, geometry);
         
@@ -528,6 +356,7 @@ public class FeatureEditor {
             editingLayer.getFeatureTable().addFeatureAsync(feature).get();
             editedFeatures.add(feature);
             Log.d(TAG, "要素添加成功");
+            Toast.makeText(context, "要素添加成功", Toast.LENGTH_SHORT).show();
         } catch (ExecutionException | InterruptedException e) {
             Log.e(TAG, "添加要素失败: " + e.getMessage());
             Toast.makeText(context, "添加要素失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();

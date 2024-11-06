@@ -14,6 +14,12 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
+
+        // 指定支持的CPU架构
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
     }
 
     buildTypes {
@@ -22,17 +28,29 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    
     packagingOptions {
         exclude 'META-INF/DEPENDENCIES'
+    }
+    
+    androidResources {
+        noCompress 'xml'
+    }
+
+    // 添加so库目录配置
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+        }
     }
 }
 
 dependencies {
-
     implementation libs.appcompat
     implementation libs.material
     implementation libs.activity
@@ -42,4 +60,8 @@ dependencies {
     androidTestImplementation libs.espresso.core
     implementation 'com.esri.arcgisruntime:arcgis-android:100.15.6'
     implementation "androidx.documentfile:documentfile:1.0.1"
+    
+    // 移除GDAL的远程依赖
+    // implementation 'org.gdal:gdal:3.4.0'
+    // implementation 'org.gdal:gdal-android:3.4.0@aar'
 }

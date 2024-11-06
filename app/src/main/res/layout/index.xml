@@ -11,226 +11,377 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- MapView -->
-
-        <!-- 放大按钮 -->
         <com.esri.arcgisruntime.mapping.view.MapView
             android:id="@+id/mapView"
             android:layout_width="0dp"
             android:layout_height="0dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="1.0"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintVertical_bias="0.0" />
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <Button
-            android:id="@+id/magnify"
-            android:layout_width="48dp"
-            android:layout_height="58dp"
-            android:text="+"
+        <!-- 地图控制按钮组 -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            app:cardElevation="4dp"
+            app:cardCornerRadius="8dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintVertical_bias="0.6"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            android:layout_marginEnd="16dp" />
+            android:layout_marginTop="64dp">
 
-        <!-- 缩小按钮 -->
-        <Button
-            android:id="@+id/shrink"
-            android:layout_width="48dp"
-            android:layout_height="58dp"
-            android:text="-"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintVertical_bias="0.4"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="@id/magnify"
-            android:layout_marginEnd="16dp" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
-        <LinearLayout
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/magnify"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:cornerRadius="0dp"
+                    android:text="+" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="?android:attr/dividerVertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shrink"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:cornerRadius="0dp"
+                    android:text="-" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 底部搜索栏 -->
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:layout_constraintBottom_toBottomOf="parent"
-            >
-            <!-- 输入框 -->
-            <EditText
-                android:id="@+id/editTextText"
-                android:layout_width="0dp"
+            android:layout_margin="16dp"
+            app:cardElevation="4dp"
+            app:cardCornerRadius="8dp"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="#ffffff"
-                android:ems="10"
-                android:padding="15dp"
-                android:hint="请输入地名"
-                android:inputType="text"
-                />
+                android:orientation="horizontal"
+                android:padding="8dp">
 
-            <!-- 加载矢量图层按钮 -->
-            <Button
-                android:id="@+id/Load_layer"
-                android:layout_width="150dp"
-                android:layout_height="55dp"
-                android:text="加载矢量图层" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
-        </LinearLayout>
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="请输入地名"
+                        android:inputType="text" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/Load_layer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="加载矢量图层" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <LinearLayout
+    <!-- 侧边导航栏 -->
+    <com.google.android.material.navigation.NavigationView
         android:id="@+id/left_drawer"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_vertical|start"
-        >
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_gravity="center_vertical|start">
-            <Button
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="图层管理"
-                android:id="@+id/action1" />
-            <RelativeLayout
-                android:id="@+id/expandable_layout_1"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:visibility="gone"
-                android:paddingLeft="16dp">
-                <Button
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="图层列表"
-                    android:id="@+id/tucengliebiao" />
-                <Button
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="图例"
-                    android:id="@+id/tuli"
-                    android:layout_toRightOf="@id/tucengliebiao"
-                    />
-
-            </RelativeLayout>
-        </LinearLayout>
-
-        <!-- 侧边菜单中的各项 -->
+        android:layout_gravity="start"
+        android:background="@android:color/white">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <Button
-                android:id="@+id/action2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="属性查询" />
-
-            <RelativeLayout
-                android:id="@+id/expandable_layout_2"
+            <!-- 图层管理部分 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone"
-                android:paddingLeft="16dp">
+                android:layout_marginBottom="8dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
 
-                <Button
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="图查属性"
-                    android:id="@+id/tuchashuxing"/>
+                    android:orientation="vertical">
 
-                <Button
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="属性查询"
-                    android:id="@+id/shuxingchaxun"
-                    android:layout_toRightOf="@+id/tuchashuxing"
-                    />
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_below="@+id/tuchashuxing"
-                    android:text="查询结果"/>
-            </RelativeLayout>
-        </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/action1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="图层管理"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"/>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+                    <RelativeLayout
+                        android:id="@+id/expandable_layout_1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:padding="8dp">
 
-            <Button
-                android:id="@+id/action3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="要素编辑" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/tucengliebiao"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="图层列表"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
 
-            <RelativeLayout
-                android:id="@+id/expandable_layout_3"
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/tuli"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="图例"
+                            android:layout_toEndOf="@id/tucengliebiao"
+                            android:layout_marginStart="8dp"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+                        <!-- 图层列表 -->
+                        <androidx.core.widget.NestedScrollView
+                            android:id="@+id/layer_list_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tucengliebiao"
+                            android:visibility="gone">
+
+                            <ListView
+                                android:id="@+id/layerListView"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:nestedScrollingEnabled="true"
+                                android:choiceMode="multipleChoice"
+                                android:padding="8dp"
+                                android:background="@android:color/white"/>
+                        </androidx.core.widget.NestedScrollView>
+
+                        <!-- 图例内容 -->
+                        <androidx.core.widget.NestedScrollView
+                            android:id="@+id/legend_container"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tucengliebiao"
+                            android:visibility="gone">
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                app:cardElevation="2dp"
+                                app:cardCornerRadius="8dp">
+
+                                <TableLayout
+                                    android:id="@+id/tulimoban"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:padding="8dp">
+
+                                    <TableRow
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginBottom="4dp">
+                                        
+                                        <com.google.android.material.button.MaterialButton
+                                            android:id="@+id/Tuli1"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="1"
+                                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                            android:layout_marginEnd="4dp"/>
+
+                                        <com.google.android.material.button.MaterialButton
+                                            android:id="@+id/Tuli2"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="2"
+                                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                            android:layout_marginEnd="4dp"/>
+
+                                        <com.google.android.material.button.MaterialButton
+                                            android:id="@+id/Tuli3"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="3"
+                                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                                    </TableRow>
+                                </TableLayout>
+                            </com.google.android.material.card.MaterialCardView>
+                        </androidx.core.widget.NestedScrollView>
+                    </RelativeLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 属性查询部分 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone"
-                android:paddingLeft="16dp">
+                android:layout_marginBottom="8dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
 
-                <Button
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="要素模板"
-                    android:id="@+id/yaosumoban"/>
-                <Button
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="要素编辑工具"
-                    android:id="@+id/yaosubianjigongju"
-                    android:layout_toRightOf="@+id/yaosumoban"/>
+                    android:orientation="vertical">
 
-            </RelativeLayout>
-        </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/action2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="属性查询"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"/>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+                    <RelativeLayout
+                        android:id="@+id/expandable_layout_2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:padding="8dp">
 
-            <Button
-                android:id="@+id/action4"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="GPS数据" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/tuchashuxing"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="图查属性"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
 
-            <RelativeLayout
-                android:id="@+id/expandable_layout_4"
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/shuxingchaxun"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="属性查询"
+                            android:layout_toEndOf="@id/tuchashuxing"
+                            android:layout_marginStart="8dp"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tuchashuxing"
+                            android:text="查询结果"
+                            android:layout_marginTop="8dp"/>
+                    </RelativeLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 要素编辑部分 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone"
-                android:paddingLeft="16dp">
+                android:layout_marginBottom="8dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
 
-                <Button
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="GPS_1"
-                    android:id="@+id/GPS_1"/>
+                    android:orientation="vertical">
 
-                <Button
-                    android:layout_width="wrap_content"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/action3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="要素编辑"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"/>
+
+                    <RelativeLayout
+                        android:id="@+id/expandable_layout_3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:padding="8dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/yaosumoban"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="要素模板"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/yaosubianjigongju"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="要素编辑工具"
+                            android:layout_toEndOf="@id/yaosumoban"
+                            android:layout_marginStart="8dp"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                    </RelativeLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- GPS数据部分 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                app:cardElevation="2dp"
+                app:cardCornerRadius="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="GPS_2"
-                    android:id="@+id/GPS_2"
-                    android:layout_toRightOf="@id/GPS_1"
-                    />
-            </RelativeLayout>
+                    android:orientation="vertical">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/action4"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="GPS数据"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"/>
+
+                    <RelativeLayout
+                        android:id="@+id/expandable_layout_4"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:padding="8dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/GPS_1"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="GPS_1"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/GPS_2"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="GPS_2"
+                            android:layout_toEndOf="@id/GPS_1"
+                            android:layout_marginStart="8dp"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                    </RelativeLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
         </LinearLayout>
 
-
-
-        <!-- 可以添加更多菜单项 -->
-    </LinearLayout>
+    </com.google.android.material.navigation.NavigationView>
 
 </androidx.drawerlayout.widget.DrawerLayout>

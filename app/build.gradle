@@ -41,4 +41,5 @@ dependencies {
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
     implementation 'com.esri.arcgisruntime:arcgis-android:100.15.6'
+    implementation "androidx.documentfile:documentfile:1.0.1"
 }

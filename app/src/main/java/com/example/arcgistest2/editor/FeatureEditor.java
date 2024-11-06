@@ -234,7 +234,7 @@ public class FeatureEditor {
             header[6] = (byte) 0x00;
             header[7] = (byte) 0x00;
             
-            // 头部长度（包括字段描述符）
+            // 头部长��（包括字段描述符）
             short headerLength = (short) (32 + 32 + 1);  // 头部 + 一个字段描述符 + 终止符
             header[8] = (byte) (headerLength & 0xFF);
             header[9] = (byte) ((headerLength >> 8) & 0xFF);

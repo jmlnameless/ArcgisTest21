@@ -6,9 +6,16 @@
     <color name="colorSurface">#FFFFFF</color>
     <color name="colorOnSurface">#000000</color>
 
+    <!-- 添加缺失的基本颜色 -->
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- 其他颜色 -->
     <color name="red">#ff0000</color>
-    <color name="white">#ffffff</color>
-    <color name="black">#000000</color>
     <color name="green">#ff4f8c0b</color>
     <color name="blue">#ff1869af</color>
     <color name="transparency">#00000000</color>
@@ -16,8 +23,4 @@
     <color name="grey">#cac9c9</color>
     <color name="light_gray">#fbf8f8</color>
     <color name="deep_gray">#3b3b3b</color>
-    <color name="purple_500">#6200EE</color>
-    <color name="purple_700">#3700B3</color>
-    <color name="teal_200">#03DAC5</color>
-    <color name="teal_700">#018786</color>
 </resources>

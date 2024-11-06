@@ -145,38 +145,65 @@
                         android:visibility="gone"
                         android:padding="8dp">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/tucengliebiao"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:id="@+id/button_container"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="图层列表"
-                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                            android:orientation="horizontal"
+                            android:gravity="start">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/tuli"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="图例"
-                            android:layout_toEndOf="@id/tucengliebiao"
-                            android:layout_marginStart="8dp"
-                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/tucengliebiao"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="图层列表"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
 
-                        <!-- 图层列表 -->
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/tuli"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="图例"
+                                android:layout_marginStart="8dp"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+                        </LinearLayout>
+
+                        <!-- 修改图层列表部分 -->
                         <androidx.core.widget.NestedScrollView
                             android:id="@+id/layer_list_container"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_below="@id/tucengliebiao"
+                            android:layout_below="@id/button_container"
                             android:visibility="gone">
 
-                            <ListView
-                                android:id="@+id/layerListView"
+                            <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:nestedScrollingEnabled="true"
-                                android:choiceMode="multipleChoice"
-                                android:padding="8dp"
-                                android:background="@android:color/white"/>
+                                android:orientation="vertical">
+
+                                <!-- 图层列表 -->
+                                <ListView
+                                    android:id="@+id/layerListView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="200dp"
+                                    android:nestedScrollingEnabled="true"
+                                    android:choiceMode="multipleChoice"
+                                    android:padding="8dp"
+                                    android:background="@android:color/white"
+                                    android:divider="@android:color/darker_gray"
+                                    android:dividerHeight="1dp"/>
+
+                                <!-- 图层操作提示 -->
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="点击图层名称以显示/隐藏图层"
+                                    android:textSize="12sp"
+                                    android:textColor="@android:color/darker_gray"
+                                    android:gravity="center"
+                                    android:padding="4dp"/>
+
+                            </LinearLayout>
                         </androidx.core.widget.NestedScrollView>
 
                         <!-- 图例内容 -->
@@ -184,7 +211,7 @@
                             android:id="@+id/legend_container"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_below="@id/tucengliebiao"
+                            android:layout_below="@id/button_container"
                             android:visibility="gone">
 
                             <com.google.android.material.card.MaterialCardView

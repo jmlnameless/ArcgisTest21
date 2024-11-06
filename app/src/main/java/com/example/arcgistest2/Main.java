@@ -23,6 +23,7 @@ import android.widget.RelativeLayout;
 import android.widget.TableLayout;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
@@ -80,6 +81,10 @@ import android.net.Uri;
 import android.os.Build;
 import android.provider.OpenableColumns;
 
+import android.provider.MediaStore;
+
+import androidx.documentfile.provider.DocumentFile;
+
 public class Main extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -91,7 +96,7 @@ public class Main extends AppCompatActivity {
     // 需要检查的文件列表(实际只需要.shx .shp .dbf .prj)
     private final List<String> filesToCheck = Arrays.asList(
             "测试数据.shp",
-            "测试数据.shp.xml",
+            "测试数据.xml",
             "测试数据.shx",
             "测试数据.dbf",
             "测试数据.prj",
@@ -160,6 +165,9 @@ public class Main extends AppCompatActivity {
 
     // 在类的开头添加常量
     private static final int PICK_SHAPEFILE_REQUEST = 1001;
+
+    // 在类的开头添加权限请求码
+    private static final int PERMISSION_REQUEST_CODE = 1000;
 
     // onCreate 方法，当活动创建时调用
     @Override
@@ -234,12 +242,9 @@ public class Main extends AppCompatActivity {
 
     private void setupSearchBar() {
         MaterialButton loadLayerButton = findViewById(R.id.Load_layer);
-        TextInputEditText searchEditText = findViewById(R.id.editTextText);
-
         loadLayerButton.setOnClickListener(v -> {
             animateButton(v);
-            // 显示选择对话框
-            showLoadLayerDialog();
+            openFilePicker();
         });
     }
 
@@ -326,7 +331,7 @@ public class Main extends AppCompatActivity {
             }
         });
 
-        // 设置图层列表点击事件
+        // 修改图层列表点击事件
         ListView layerListView = findViewById(R.id.layerListView);
         layerListView.setOnItemClickListener((parent, view, position, id) -> {
             Log.d(TAG, "图层列表项被点击: " + position);
@@ -334,10 +339,9 @@ public class Main extends AppCompatActivity {
             boolean isChecked = layerListView.isItemChecked(position);
             layer.setVisible(isChecked);
             
-            if (isChecked && getVisibleLayerCount() == 1) {
+            // 如果图层被选中，立即缩放到该图层
+            if (isChecked) {
                 zoomToLayerExtent(layer);
-            } else if (isChecked) {
-                zoomToVisibleLayersExtent();
             }
         });
     }
@@ -353,7 +357,7 @@ public class Main extends AppCompatActivity {
 
         attributeQueryButton.setOnClickListener(v -> {
             animateButton(v);
-            // 实现属性查询功能
+            // 实属性查询功能
         });
     }
 
@@ -468,7 +472,7 @@ public class Main extends AppCompatActivity {
         scaleY.start();
     }
 
-    // 展开视图的动画
+    // 展视图的动画
     private void expandView(View view) {
         view.setVisibility(View.VISIBLE);
         ObjectAnimator animator = ObjectAnimator.ofFloat(view, "alpha", 0f, 1f);
@@ -492,7 +496,7 @@ public class Main extends AppCompatActivity {
     }
 
     private void handleLayerList() {
-        // 实现图层列表的显示逻辑
+        // 实现图层列表的显逻
         ListView layerListView = findViewById(R.id.layerListView);
         if (layerListView.getVisibility() == View.VISIBLE) {
             layerListView.setVisibility(View.GONE);
@@ -593,7 +597,7 @@ public class Main extends AppCompatActivity {
                         // 如果没有查询结果，显示提示对话框
                         showAlertDialog("未找到要素");
                     } else {
-                        // 处理查询结果并高亮显示要素
+                        // 处理询结果并高亮显示要素
                         highlightFeaturesFromResult(result);
                     }
 
@@ -660,13 +664,69 @@ public class Main extends AppCompatActivity {
 
     // 处理权限请求
     private void handlePermission() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13及以上版本
+            String[] permissions = {
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO
+            };
+            requestPermissions(permissions);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Android 6.0到12的版本
+            String[] permissions = {
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            };
+            requestPermissions(permissions);
         }
     }
 
-    // 将资源文件复制到内部存储
+    // 添加请求权限的方法
+    private void requestPermissions(String[] permissions) {
+        List<String> permissionsToRequest = new ArrayList<>();
+        for (String permission : permissions) {
+            if (ActivityCompat.checkSelfPermission(this, permission) 
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(permission);
+            }
+        }
+        
+        if (!permissionsToRequest.isEmpty()) {
+            ActivityCompat.requestPermissions(this, 
+                permissionsToRequest.toArray(new String[0]), 
+                PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    // 添加权限请求结果处理
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean allGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+            
+            if (allGranted) {
+                // 权限都已授予，继续初始化
+                copyShapefilesToInternalStorage(this);
+                loadInitialLayers();
+            } else {
+                // 权限被拒绝
+                Toast.makeText(this, "需要存储权限才能正常使用应用", 
+                    Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    // 修改复制文件的方法
     public boolean copyAssetToInternalStorage(Context context, String assetName, String destFileName) {
         if (destFileName == null) {
             destFileName = assetName;
@@ -675,15 +735,24 @@ public class Main extends AppCompatActivity {
         File fileDir = context.getFilesDir();
         File destFile = new File(fileDir, destFileName);
 
+        // 如果文件已存在，先删除
+        if (destFile.exists()) {
+            destFile.delete();
+        }
+
         try (InputStream in = context.getAssets().open(assetName);
              FileOutputStream fos = new FileOutputStream(destFile)) {
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[8192];
             int length;
             while ((length = in.read(buffer)) > 0) {
                 fos.write(buffer, 0, length);
             }
+            fos.flush();
+            Log.d(TAG, "成功复制文件: " + assetName + " 到 " + destFile.getAbsolutePath());
+            Log.d(TAG, "文件大小: " + destFile.length() + " bytes");
             return true;
         } catch (IOException e) {
+            Log.e(TAG, "复制文件失败: " + assetName + ", 错误: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -712,7 +781,7 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 设置 Shapefile 特征表
+    // 设置 Shapefile ��征表
     private void setupShapefileFeatureTable(String shapefilePath) {
         ShapefileFeatureTable shapefileFeatureTable = new ShapefileFeatureTable(shapefilePath);
         shapefileFeatureTable.loadAsync();
@@ -828,7 +897,7 @@ public class Main extends AppCompatActivity {
                                 layerNames.add(config.displayName);
                                 layerListAdapter.notifyDataSetChanged();
 
-                                // 默认选中图层
+                                // 默认选中图
                                 ListView layerListView = findViewById(R.id.layerListView);
                                 layerListView.setItemChecked(layerNames.size() - 1, true);
 
@@ -854,21 +923,29 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 添加缩放到图层范围的方法
+    // 修改缩放到图层范围的方法
     private void zoomToLayerExtent(FeatureLayer layer) {
         if (layer != null && layer.getFullExtent() != null) {
-            // 获取图层范围并添加缓冲区
-            Envelope extent = layer.getFullExtent();
-            Envelope bufferedExtent = new Envelope(
-                extent.getXMin() - extent.getWidth() * 0.1,
-                extent.getYMin() - extent.getHeight() * 0.1,
-                extent.getXMax() + extent.getWidth() * 0.1,
-                extent.getYMax() + extent.getHeight() * 0.1,
-                extent.getSpatialReference()
-            );
-            
-            // 使用动画效果缩放到图层范围
-            mMapView.setViewpointGeometryAsync(bufferedExtent, 100);
+            try {
+                // 获取图层范围并添加缓冲区
+                Envelope extent = layer.getFullExtent();
+                Envelope bufferedExtent = new Envelope(
+                    extent.getXMin() - extent.getWidth() * 0.1,
+                    extent.getYMin() - extent.getHeight() * 0.1,
+                    extent.getXMax() + extent.getWidth() * 0.1,
+                    extent.getYMax() + extent.getHeight() * 0.1,
+                    extent.getSpatialReference()
+                );
+                
+                // 使用动画效果缩放到图层范围
+                mMapView.setViewpointGeometryAsync(bufferedExtent, 1.0)
+                    .addDoneListener(() -> {
+                        String layerName = layerNames.get(featureLayers.indexOf(layer));
+                        Log.d(TAG, "已缩放至图层: " + layerName);
+                    });
+            } catch (Exception e) {
+                Log.e(TAG, "缩放到图层失败: " + e.getMessage());
+            }
         }
     }
 
@@ -999,44 +1076,83 @@ public class Main extends AppCompatActivity {
         }
     }
 
-    // 添加导入Shapefile的方法
+    // 修改导入Shapefile的方法
     private void importShapefile(Uri uri) {
         try {
-            // 获取文件名
-            String fileName = getFileNameFromUri(uri);
+            String fileName = getFileName(uri);
+            Log.d(TAG, "选择的文件: " + fileName);
+
             if (!fileName.toLowerCase().endsWith(".shp")) {
                 Toast.makeText(this, "请选择.shp文件", Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            // 创建临时目录
-            File tempDir = new File(getFilesDir(), "imported_layers");
-            if (!tempDir.exists()) {
-                tempDir.mkdirs();
+            // 获取实际文件路径
+            String actualPath = getActualPath(uri);
+            if (actualPath == null) {
+                Log.e(TAG, "无法获取文件路径");
+                return;
+            }
+            Log.d(TAG, "文件实际路径: " + actualPath);
+
+            File sourceFile = new File(actualPath);
+            File sourceDir = sourceFile.getParentFile();
+            if (!sourceDir.exists()) {
+                Log.e(TAG, "源文件目录不存在");
+                return;
+            }
+            Log.d(TAG, "源文件目录: " + sourceDir.getAbsolutePath());
+
+            // 创建导入目录
+            File importDir = new File(getFilesDir(), "imported_layers");
+            if (!importDir.exists()) {
+                importDir.mkdirs();
             }
 
             // 复制所有相关文件
             String baseName = fileName.substring(0, fileName.length() - 4);
             String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
-            
+            boolean allFilesCopied = true;
+            List<String> missingFiles = new ArrayList<>();
+
             for (String ext : extensions) {
-                // 修改URI中的文件扩展名
-                Uri fileUri = changeFileExtension(uri, ext);
-                if (fileUri != null) {
-                    File destFile = new File(tempDir, baseName + ext);
-                    copyFileFromUri(fileUri, destFile);
+                String sourceFileName = baseName + ext;
+                File sourceFileWithExt = new File(sourceDir, sourceFileName);
+                Log.d(TAG, "检查文件: " + sourceFileWithExt.getAbsolutePath());
+                
+                if (sourceFileWithExt.exists() && sourceFileWithExt.isFile()) {
+                    File destFile = new File(importDir, sourceFileName);
+                    try {
+                        copyFile(Uri.fromFile(sourceFileWithExt), destFile);
+                        Log.d(TAG, "已复制: " + sourceFileName);
+                    } catch (IOException e) {
+                        Log.e(TAG, "复制文件失败: " + sourceFileName + " - " + e.getMessage());
+                        allFilesCopied = false;
+                        missingFiles.add(sourceFileName);
+                    }
+                } else {
+                    Log.e(TAG, "文件不存在: " + sourceFileWithExt.getAbsolutePath());
+                    allFilesCopied = false;
+                    missingFiles.add(sourceFileName);
                 }
             }
 
-            // 加载图层
-            String shapefilePath = new File(tempDir, fileName).getAbsolutePath();
+            if (!allFilesCopied) {
+                Toast.makeText(this, "文件缺失: " + String.join(", ", missingFiles), Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 加图层
+            String shapefilePath = new File(importDir, fileName).getAbsolutePath();
+            Log.d(TAG, "开始加载Shapefile: " + shapefilePath);
+
             layerManager.loadShapefileLayer(shapefilePath, new LayerManager.LayerLoadCallback() {
                 @Override
                 public void onSuccess(FeatureLayer layer) {
                     featureLayers.add(layer);
                     layerNames.add(baseName);
                     layerListAdapter.notifyDataSetChanged();
-                    
+
                     // 默认选中并缩放到新图层
                     ListView layerListView = findViewById(R.id.layerListView);
                     layerListView.setItemChecked(layerNames.size() - 1, true);
@@ -1047,59 +1163,102 @@ public class Main extends AppCompatActivity {
 
                 @Override
                 public void onError(String error) {
-                    Toast.makeText(Main.this, "导入失败: " + error, Toast.LENGTH_SHORT).show();
+                    Log.e(TAG, "图层加载失败: " + error);
+                    Toast.makeText(Main.this, "图层加载失败: " + error, Toast.LENGTH_SHORT).show();
                 }
             });
 
         } catch (Exception e) {
+            Log.e(TAG, "导入失败: " + e.getMessage());
+            e.printStackTrace();
             Toast.makeText(this, "导入失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
-    // 辅助方法：从Uri获取文件名
-    private String getFileNameFromUri(Uri uri) {
-        String result = null;
-        if (uri.getScheme().equals("content")) {
-            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (index >= 0) {
-                        result = cursor.getString(index);
+    // 添加文件路径获取方法
+    private String getActualPath(Uri uri) {
+        try {
+            Log.d(TAG, "尝试获取文件路径，URI: " + uri.toString());
+            
+            if ("file".equals(uri.getScheme())) {
+                return uri.getPath();
+            }
+            
+            if ("content".equals(uri.getScheme())) {
+                // 对于 Downloads 目录的特殊处理
+                if (uri.toString().contains("com.android.providers.downloads.documents")) {
+                    String path = uri.getPath();
+                    if (path != null && path.contains("raw:")) {
+                        path = path.substring(path.indexOf("raw:") + 4);
+                        Log.d(TAG, "从Downloads解析路径: " + path);
+                        return path;
+                    }
+                }
+
+                // 使用 ContentResolver
+                try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int dataIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATA);
+                        if (dataIndex != -1) {
+                            String path = cursor.getString(dataIndex);
+                            Log.d(TAG, "通过ContentResolver获取路径: " + path);
+                            return path;
+                        }
+                    }
+                }
+
+                // 使用 DocumentFile
+                DocumentFile documentFile = DocumentFile.fromSingleUri(this, uri);
+                if (documentFile != null) {
+                    String path = documentFile.getUri().getPath();
+                    if (path != null) {
+                        if (path.contains("primary:")) {
+                            path = "/storage/emulated/0/" + path.substring(path.indexOf("primary:") + 8);
+                        }
+                        Log.d(TAG, "通过DocumentFile获取路径: " + path);
+                        return path;
                     }
                 }
             }
+        } catch (Exception e) {
+            Log.e(TAG, "获取文件路径失败: " + e.getMessage());
+            e.printStackTrace();
         }
-        if (result == null) {
-            result = uri.getPath();
-            int cut = result.lastIndexOf('/');
-            if (cut != -1) {
-                result = result.substring(cut + 1);
-            }
-        }
-        return result;
+        return null;
     }
 
-    // 辅助方法：修改URI的文件扩展名
-    private Uri changeFileExtension(Uri originalUri, String newExtension) {
-        String originalPath = originalUri.getPath();
-        if (originalPath == null) return null;
+    // 添加文件复制方法
+    private void copyFile(Uri sourceUri, File destFile) throws IOException {
+        Log.d(TAG, "开始复制文件: " + sourceUri + " -> " + destFile.getAbsolutePath());
         
-        String newPath = originalPath.substring(0, originalPath.lastIndexOf(".")) + newExtension;
-        return Uri.parse(originalUri.toString().replace(originalPath, newPath));
-    }
-
-    // 辅助方法：从Uri复制文件
-    private void copyFileFromUri(Uri sourceUri, File destFile) throws IOException {
-        try (InputStream is = getContentResolver().openInputStream(sourceUri);
-             FileOutputStream fos = new FileOutputStream(destFile)) {
-            if (is == null) throw new IOException("Cannot open input stream");
-            
-            byte[] buffer = new byte[4096];
-            int length;
-            while ((length = is.read(buffer)) > 0) {
-                fos.write(buffer, 0, length);
+        try {
+            InputStream is;
+            if ("file".equals(sourceUri.getScheme())) {
+                is = new java.io.FileInputStream(new File(sourceUri.getPath()));
+            } else {
+                is = getContentResolver().openInputStream(sourceUri);
             }
-            fos.flush();
+            
+            if (is == null) {
+                throw new IOException("无法打开输入流: " + sourceUri);
+            }
+
+            try (FileOutputStream fos = new FileOutputStream(destFile)) {
+                byte[] buffer = new byte[8192];
+                int length;
+                long totalBytes = 0;
+                while ((length = is.read(buffer)) > 0) {
+                    fos.write(buffer, 0, length);
+                    totalBytes += length;
+                }
+                fos.flush();
+                Log.d(TAG, "文件复制完成，大小: " + totalBytes + " 字节");
+            } finally {
+                is.close();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "复制文件失败: " + e.getMessage());
+            throw e;
         }
     }
 
@@ -1114,6 +1273,88 @@ public class Main extends AppCompatActivity {
         );
         String shapefilePath = getInternalStorageFilePath(this, layerName + ".shp");
         loadShapefileLayer(shapefilePath, config);
+    }
+
+    // 添加获取文件名的方法
+    private String getFileName(Uri uri) {
+        String result = null;
+        if ("content".equals(uri.getScheme())) {
+            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex != -1) {
+                        result = cursor.getString(nameIndex);
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "获取文件名失败: " + e.getMessage());
+            }
+        }
+        if (result == null) {
+            result = uri.getPath();
+            int cut = result != null ? result.lastIndexOf('/') : -1;
+            if (cut != -1) {
+                result = result.substring(cut + 1);
+            }
+        }
+        return result != null ? result : "unknown";
+    }
+
+    // 修改缩放至全图的方法
+    private void zoomToAllLayers() {
+        // 获取所有选中的图层
+        List<FeatureLayer> selectedLayers = new ArrayList<>();
+        ListView layerListView = findViewById(R.id.layerListView);
+        
+        for (int i = 0; i < featureLayers.size(); i++) {
+            if (layerListView.isItemChecked(i)) {
+                selectedLayers.add(featureLayers.get(i));
+            }
+        }
+
+        if (selectedLayers.isEmpty()) {
+            Toast.makeText(this, "请先选择要缩放的图层", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 找到选中图层中范围最大的图层
+        FeatureLayer largestLayer = null;
+        double maxArea = 0;
+
+        for (FeatureLayer layer : selectedLayers) {
+            if (layer.getFullExtent() != null) {
+                double width = layer.getFullExtent().getWidth();
+                double height = layer.getFullExtent().getHeight();
+                double area = width * height;
+                if (area > maxArea) {
+                    maxArea = area;
+                    largestLayer = layer;
+                }
+            }
+        }
+
+        if (largestLayer != null) {
+            // 使用 final 变量来在 lambda 表达式中引用
+            final FeatureLayer finalLargestLayer = largestLayer;
+            
+            // 缩放到最大图层的范围
+            Envelope extent = finalLargestLayer.getFullExtent();
+            // 添加缓冲区
+            Envelope bufferedExtent = new Envelope(
+                extent.getXMin() - extent.getWidth() * 0.1,
+                extent.getYMin() - extent.getHeight() * 0.1,
+                extent.getXMax() + extent.getWidth() * 0.1,
+                extent.getYMax() + extent.getHeight() * 0.1,
+                extent.getSpatialReference()
+            );
+
+            // 使用动画效果缩放
+            mMapView.setViewpointGeometryAsync(bufferedExtent, 1.0)
+                .addDoneListener(() -> {
+                    String layerName = layerNames.get(featureLayers.indexOf(finalLargestLayer));
+                    Toast.makeText(this, "已缩放至: " + layerName, Toast.LENGTH_SHORT).show();
+                });
+        }
     }
 }
 

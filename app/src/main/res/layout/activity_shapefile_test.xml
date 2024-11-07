@@ -35,13 +35,13 @@
             android:textColor="@android:color/black"
             android:scrollbars="vertical"/>
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_zoom_to_layer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="缩放至图层" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_attribute_query"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -2,364 +2,398 @@ package com.example.arcgistest2.editor;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
 import com.esri.arcgisruntime.data.Feature;
-import com.esri.arcgisruntime.data.FeatureTable;
-import com.esri.arcgisruntime.data.ShapefileFeatureTable;
-import com.esri.arcgisruntime.geometry.Geometry;
+import com.esri.arcgisruntime.data.FeatureCollection;
+import com.esri.arcgisruntime.data.FeatureCollectionTable;
+import com.esri.arcgisruntime.data.Field;
 import com.esri.arcgisruntime.geometry.GeometryType;
 import com.esri.arcgisruntime.geometry.Point;
 import com.esri.arcgisruntime.geometry.PointCollection;
 import com.esri.arcgisruntime.geometry.Polygon;
 import com.esri.arcgisruntime.geometry.Polyline;
-import com.esri.arcgisruntime.geometry.SpatialReference;
+import com.esri.arcgisruntime.layers.FeatureCollectionLayer;
 import com.esri.arcgisruntime.layers.FeatureLayer;
-import com.esri.arcgisruntime.loadable.LoadStatus;
 import com.esri.arcgisruntime.mapping.view.Graphic;
 import com.esri.arcgisruntime.mapping.view.GraphicsOverlay;
 import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleFillSymbol;
 import com.esri.arcgisruntime.symbology.SimpleLineSymbol;
 import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
-import com.esri.arcgisruntime.symbology.SimpleRenderer;
-import com.esri.arcgisruntime.symbology.Symbol;
-import com.example.arcgistest2.layer.LayerManager;
-import com.example.arcgistest2.utils.ShapefileCreator;
+import com.esri.arcgisruntime.symbology.Renderer;
+import com.esri.arcgisruntime.concurrent.ListenableFuture;
+import com.esri.arcgisruntime.loadable.LoadStatus;
+import com.esri.arcgisruntime.data.ServiceFeatureTable;
+import com.esri.arcgisruntime.data.QueryParameters;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 public class FeatureEditor {
     private static final String TAG = "FeatureEditor";
     private final MapView mapView;
     private final Context context;
-    private FeatureLayer editingLayer;
     private GeometryType currentGeometryType;
-    private List<Point> tempPoints;
-    private boolean isEditing;
-    private GraphicsOverlay tempGraphicsOverlay;
-    private final List<Feature> editedFeatures = new ArrayList<>();
-    private final LayerManager layerManager;
+    private GraphicsOverlay graphicsOverlay;
+    private PointCollection points;
+    private boolean isEditing = false;
+    private FeatureLayer currentLayer;
+    private FeatureCollectionTable currentTable;
+
+    // 添加一个回调接口用于通知图层创建
+    public interface LayerCreationCallback {
+        void onLayerCreated(FeatureLayer layer, String layerName);
+    }
+    
+    private LayerCreationCallback layerCreationCallback;
+    private List<Point> pointFeatures = new ArrayList<>(); // 存储多个点要素
 
     public FeatureEditor(MapView mapView, Context context) {
         this.mapView = mapView;
         this.context = context;
-        this.tempPoints = new ArrayList<>();
-        this.isEditing = false;
-        this.layerManager = new LayerManager(context, mapView, mapView.getMap());
-        setupTempGraphicsOverlay();
+        this.graphicsOverlay = new GraphicsOverlay();
+        this.mapView.getGraphicsOverlays().add(graphicsOverlay);
     }
 
-    private void setupTempGraphicsOverlay() {
-        tempGraphicsOverlay = new GraphicsOverlay();
-        mapView.getGraphicsOverlays().add(tempGraphicsOverlay);
-    }
-
-    // 创建新的要素图层
-    public void createNewFeatureLayer(GeometryType geometryType, String layerName) {
-        try {
-            // 使用ShapefileCreator创建Shapefile
-            boolean created = ShapefileCreator.createShapefile(context, layerName, geometryType);
-            
-            if (!created) {
-                throw new Exception("创建Shapefile失败");
-            }
-
-            // 获取创建的Shapefile路径
-            File shapefileDir = new File(context.getFilesDir(), "shapefiles");
-            String shapefilePath = new File(shapefileDir, layerName + ".shp").getAbsolutePath();
-
-            // 加载新创建的图层
-            ShapefileFeatureTable shapefileFeatureTable = new ShapefileFeatureTable(shapefilePath);
-            shapefileFeatureTable.loadAsync();
-            
-            shapefileFeatureTable.addDoneLoadingListener(() -> {
-                if (shapefileFeatureTable.getLoadStatus() == LoadStatus.LOADED) {
-                    FeatureLayer layer = new FeatureLayer(shapefileFeatureTable);
-                    editingLayer = layer;
-                    currentGeometryType = geometryType;
-                    
-                    // 设置图层符号
-                    setLayerSymbol(layer, geometryType);
-                    
-                    // 添加到地图
-                    mapView.getMap().getOperationalLayers().add(layer);
-                    
-                    // 通知用户
-                    Toast.makeText(context, "创建图层成功", Toast.LENGTH_SHORT).show();
-                } else {
-                    String error = shapefileFeatureTable.getLoadError().getMessage();
-                    Log.e(TAG, "加载图层失败: " + error);
-                    Toast.makeText(context, "加载图层失败: " + error, Toast.LENGTH_SHORT).show();
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e(TAG, "创建图层失败: " + e.getMessage());
-            Toast.makeText(context, "创建图层失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // 添加辅助方法
-    private void runOnUiThread(Runnable runnable) {
-        if (context instanceof android.app.Activity) {
-            ((android.app.Activity) context).runOnUiThread(runnable);
-        }
-    }
-
-    // 添加点
-    public void addPoint(Point point) {
-        if (!isEditing || editingLayer == null) return;
-        
-        tempPoints.add(point);
-        updateTempGraphics();
-        
-        switch (currentGeometryType) {
-            case POINT:
-                createFeature(point);
-                tempPoints.clear();
-                break;
-                
-            case POLYLINE:
-            case POLYGON:
-                // 临时图形已在updateTempGraphics中更新
-                break;
-        }
-    }
-
-    // 更新临时图形
-    private void updateTempGraphics() {
-        tempGraphicsOverlay.getGraphics().clear();
-        
-        if (tempPoints.isEmpty()) return;
-
-        Geometry geometry = null;
-        Symbol symbol = null;
-        
-        switch (currentGeometryType) {
-            case POINT:
-                geometry = tempPoints.get(tempPoints.size() - 1);
-                symbol = new SimpleMarkerSymbol(
-                    SimpleMarkerSymbol.Style.CIRCLE, 
-                    Color.argb(150, 255, 0, 0), 
-                    10);
-                break;
-            case POLYLINE:
-                if (tempPoints.size() >= 2) {
-                    geometry = createPolyline();
-                    symbol = new SimpleLineSymbol(
-                        SimpleLineSymbol.Style.DASH, 
-                        Color.argb(150, 0, 0, 255), 
-                        2);
-                }
-                break;
-            case POLYGON:
-                if (tempPoints.size() >= 3) {
-                    geometry = createPolygon();
-                    SimpleLineSymbol outline = new SimpleLineSymbol(
-                        SimpleLineSymbol.Style.DASH, 
-                        Color.argb(150, 0, 0, 0), 
-                        2);
-                    symbol = new SimpleFillSymbol(
-                        SimpleFillSymbol.Style.SOLID, 
-                        Color.argb(50, 0, 255, 0), 
-                        outline);
-                }
-                break;
-        }
-
-        if (geometry != null && symbol != null) {
-            Graphic graphic = new Graphic(geometry, symbol);
-            tempGraphicsOverlay.getGraphics().add(graphic);
-        }
-
-        // 添加顶点标记
-        SimpleMarkerSymbol vertexSymbol = new SimpleMarkerSymbol(
-            SimpleMarkerSymbol.Style.CIRCLE, 
-            Color.RED, 
-            5);
-        for (Point point : tempPoints) {
-            Graphic vertexGraphic = new Graphic(point, vertexSymbol);
-            tempGraphicsOverlay.getGraphics().add(vertexGraphic);
-        }
-    }
-
-    // 完成绘制
-    public void completeDrawing() {
-        if (!isEditing || tempPoints.isEmpty() || editingLayer == null) return;
-        
-        try {
-            Geometry geometry = null;
-            switch (currentGeometryType) {
-                case POINT:
-                    geometry = tempPoints.get(0);
-                    break;
-                case POLYLINE:
-                    if (tempPoints.size() >= 2) {
-                        geometry = createPolyline();
-                    }
-                    break;
-                case POLYGON:
-                    if (tempPoints.size() >= 3) {
-                        geometry = createPolygon();
-                    }
-                    break;
-            }
-            
-            if (geometry != null) {
-                createFeature(geometry);
-            } else {
-                Toast.makeText(context, "无效的几何形状", Toast.LENGTH_SHORT).show();
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "创建要素失败: " + e.getMessage());
-            Toast.makeText(context, "创建要素失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        } finally {
-            stopEditing();
-        }
-    }
-
-    // 保存为Shapefile
-    public void saveAsShapefile(String fileName) {
-        if (editingLayer == null || editingLayer.getFeatureTable() == null) {
-            Toast.makeText(context, "没有可保存的图层", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        try {
-            String basePath = new File(context.getFilesDir(), fileName).getAbsolutePath();
-            ShapefileFeatureTable sourceTable = (ShapefileFeatureTable) editingLayer.getFeatureTable();
-            
-            // 复制所有相关文件
-            String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
-            String sourcePath = sourceTable.getPath();
-            if (sourcePath != null) {
-                String sourceBasePath = sourcePath.substring(0, sourcePath.length() - 4);
-                for (String ext : extensions) {
-                    File sourceFile = new File(sourceBasePath + ext);
-                    if (sourceFile.exists()) {
-                        File targetFile = new File(basePath + ext);
-                        Files.copy(
-                            sourceFile.toPath(),
-                            targetFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING
-                        );
-                    }
-                }
-                Toast.makeText(context, "保存成功: " + fileName, Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(context, "保存失败: 无法获取源文件路径", Toast.LENGTH_SHORT).show();
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "保存Shapefile失败: " + e.getMessage());
-            Toast.makeText(context, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // Getter方法
-    public boolean isEditing() {
-        return isEditing;
+    public void setCurrentGeometryType(GeometryType geometryType) {
+        this.currentGeometryType = geometryType;
     }
 
     public GeometryType getCurrentGeometryType() {
         return currentGeometryType;
     }
 
-    public FeatureLayer getEditingLayer() {
-        return editingLayer;
+    public void startEditing() {
+        if (currentGeometryType == null) {
+            Toast.makeText(context, "请先选择要素类型", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        isEditing = true;
+        points = new PointCollection(mapView.getSpatialReference());
+        graphicsOverlay.getGraphics().clear();
     }
 
-    // 设置图层符号
-    private void setLayerSymbol(FeatureLayer layer, GeometryType geometryType) {
-        switch (geometryType) {
+    public void addPoint(Point point) {
+        if (!isEditing) return;
+
+        switch (currentGeometryType) {
+            case POINT:
+                // 对于点要素，直接添加到列表中
+                pointFeatures.add(point);
+                // 显示预览
+                showPointPreview(point);
+                break;
+            default:
+                // 对于线和面要素，添加到点集合中
+                points.add(point);
+                updatePreviewGraphic();
+                break;
+        }
+    }
+
+    private void showPointPreview(Point point) {
+        SimpleMarkerSymbol pointSymbol = new SimpleMarkerSymbol(
+            SimpleMarkerSymbol.Style.CIRCLE, Color.RED, 10);
+        Graphic graphic = new Graphic(point, pointSymbol);
+        graphicsOverlay.getGraphics().add(graphic);
+    }
+
+    private void updatePreviewGraphic() {
+        graphicsOverlay.getGraphics().clear();
+        
+        if (points.size() == 0) return;
+
+        Graphic graphic = null;
+        switch (currentGeometryType) {
             case POINT:
                 SimpleMarkerSymbol pointSymbol = new SimpleMarkerSymbol(
                     SimpleMarkerSymbol.Style.CIRCLE, Color.RED, 10);
-                layer.setRenderer(new SimpleRenderer(pointSymbol));
+                graphic = new Graphic(points.get(points.size() - 1), pointSymbol);
                 break;
-                
+
             case POLYLINE:
-                SimpleLineSymbol lineSymbol = new SimpleLineSymbol(
-                    SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
-                layer.setRenderer(new SimpleRenderer(lineSymbol));
+                if (points.size() > 1) {
+                    SimpleLineSymbol lineSymbol = new SimpleLineSymbol(
+                        SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
+                    Polyline polyline = new Polyline(points);
+                    graphic = new Graphic(polyline, lineSymbol);
+                }
                 break;
-                
+
             case POLYGON:
-                SimpleLineSymbol outlineSymbol = new SimpleLineSymbol(
-                    SimpleLineSymbol.Style.SOLID, Color.BLACK, 2);
-                SimpleFillSymbol polygonSymbol = new SimpleFillSymbol(
-                    SimpleFillSymbol.Style.SOLID, Color.argb(100, 0, 255, 0), outlineSymbol);
-                layer.setRenderer(new SimpleRenderer(polygonSymbol));
+                if (points.size() > 2) {
+                    SimpleLineSymbol outlineSymbol = new SimpleLineSymbol(
+                        SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
+                    SimpleFillSymbol fillSymbol = new SimpleFillSymbol(
+                        SimpleFillSymbol.Style.SOLID, Color.argb(100, 0, 0, 255), outlineSymbol);
+                    Polygon polygon = new Polygon(points);
+                    graphic = new Graphic(polygon, fillSymbol);
+                }
                 break;
         }
-    }
 
-    // 开始编辑
-    public void startEditing(GeometryType geometryType) {
-        currentGeometryType = geometryType;
-        isEditing = true;
-        tempPoints.clear();
-        tempGraphicsOverlay.getGraphics().clear();
-        Log.d(TAG, "开始编辑: " + geometryType.name());
-    }
-
-    // 停止编辑
-    public void stopEditing() {
-        isEditing = false;
-        tempPoints.clear();
-        tempGraphicsOverlay.getGraphics().clear();
-        Log.d(TAG, "停止编辑");
-    }
-
-    // 创建线要素
-    private Polyline createPolyline() {
-        PointCollection points = new PointCollection(mapView.getSpatialReference());
-        points.addAll(tempPoints);
-        return new Polyline(points);
-    }
-
-    // 创建面要素
-    private Polygon createPolygon() {
-        PointCollection points = new PointCollection(mapView.getSpatialReference());
-        points.addAll(tempPoints);
-        // 确保多边形闭合
-        if (!tempPoints.get(0).equals(tempPoints.get(tempPoints.size() - 1))) {
-            points.add(tempPoints.get(0));
+        if (graphic != null) {
+            graphicsOverlay.getGraphics().add(graphic);
         }
-        return new Polygon(points);
     }
 
-    // 创建要素
-    private void createFeature(Geometry geometry) {
-        if (editingLayer == null || editingLayer.getFeatureTable() == null) return;
-        
-        Map<String, Object> attributes = new HashMap<>();
-        // 添加必要的属性
-        attributes.put("ID", System.currentTimeMillis()); 
-        attributes.put("NAME", "要素_" + System.currentTimeMillis());
-        
-        Feature feature = editingLayer.getFeatureTable().createFeature(attributes, geometry);
-        
+    public void completeDrawing() {
+        if (!isEditing) return;
+
         try {
-            editingLayer.getFeatureTable().addFeatureAsync(feature).get();
-            editedFeatures.add(feature);
-            Log.d(TAG, "要素添加成功");
-            Toast.makeText(context, "要素添加成功", Toast.LENGTH_SHORT).show();
-        } catch (ExecutionException | InterruptedException e) {
-            Log.e(TAG, "添加要素失败: " + e.getMessage());
-            Toast.makeText(context, "添加要素失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            if (currentLayer == null || currentTable == null) {
+                createNewFeatureLayer();
+                // 等待图层创建完成
+                Thread.sleep(1000); // 增加等待时间
+            }
+
+            if (currentTable == null || currentLayer == null) {
+                throw new IllegalStateException("图层未正确创建");
+            }
+
+            switch (currentGeometryType) {
+                case POINT:
+                    // 添加所有点要素
+                    if (pointFeatures.isEmpty()) {
+                        throw new IllegalStateException("没有要素可添加");
+                    }
+                    for (Point point : pointFeatures) {
+                        Map<String, Object> attributes = new HashMap<>();
+                        attributes.put("OBJECTID", generateObjectId());
+                        attributes.put("FEAT_NAME", "点要素");
+                        attributes.put("FEAT_DESC", "自动创建的点要素");
+                        attributes.put("FEAT_ID", generateFeatureId());
+                        
+                        Feature feature = currentTable.createFeature(attributes, point);
+                        ListenableFuture<Void> future = currentTable.addFeatureAsync(feature);
+                        future.addDoneListener(() -> {
+                            try {
+                                future.get();
+                                Log.d(TAG, "点要素添加成功");
+                            } catch (Exception e) {
+                                Log.e(TAG, "添加点要素失败: " + e.getMessage());
+                            }
+                        });
+                    }
+                    break;
+                    
+                default:
+                    // 处理线和面要素
+                    if (points.size() >= getMinimumPointsRequired()) {
+                        Map<String, Object> attributes = new HashMap<>();
+                        attributes.put("OBJECTID", generateObjectId());
+                        attributes.put("FEAT_NAME", getGeometryTypeName());
+                        attributes.put("FEAT_DESC", "自动创建的" + getGeometryTypeName());
+                        attributes.put("FEAT_ID", generateFeatureId());
+                        
+                        com.esri.arcgisruntime.geometry.Geometry geometry = createGeometry();
+                        Feature feature = currentTable.createFeature(attributes, geometry);
+                        ListenableFuture<Void> future = currentTable.addFeatureAsync(feature);
+                        future.addDoneListener(() -> {
+                            try {
+                                future.get();
+                                Log.d(TAG, getGeometryTypeName() + "添加成功");
+                            } catch (Exception e) {
+                                Log.e(TAG, "添加要素失败: " + e.getMessage());
+                            }
+                        });
+                    } else {
+                        throw new IllegalStateException("点数不足以创建要素");
+                    }
+                    break;
+            }
+
+            // 清理绘制状态
+            isEditing = false;
+            points.clear();
+            pointFeatures.clear();
+            graphicsOverlay.getGraphics().clear();
+
+            // 在主线程显示提示并刷新图层
+            new Handler(Looper.getMainLooper()).post(() -> {
+                Toast.makeText(context, "要素添加成功", Toast.LENGTH_SHORT).show();
+                if (currentLayer != null) {
+                    currentLayer.clearSelection();
+                }
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, "完成绘制失败: " + e.getMessage());
+            new Handler(Looper.getMainLooper()).post(() -> 
+                Toast.makeText(context, "完成绘制失败: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+            );
         }
+    }
+
+    private int getMinimumPointsRequired() {
+        switch (currentGeometryType) {
+            case POINT:
+                return 1;
+            case POLYLINE:
+                return 2;
+            case POLYGON:
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
+    public void cancelDrawing() {
+        isEditing = false;
+        if (points != null) {
+            points.clear();
+        }
+        pointFeatures.clear();
+        graphicsOverlay.getGraphics().clear();
+    }
+
+    private void createNewFeatureLayer() {
+        try {
+            // 创建字段列表
+            List<Field> fields = new ArrayList<>();
+            
+            // 添加 OBJECTID 字段（必需的）
+            fields.add(Field.createInteger("OBJECTID", "Object ID"));
+            
+            // 添加其他字段
+            fields.add(Field.createString("FEAT_NAME", "名称", 50));
+            fields.add(Field.createString("FEAT_DESC", "描述", 255));
+            fields.add(Field.createInteger("FEAT_ID", "编号"));
+            
+            // 创建要素集合表，确保使用正确的空间参考
+            currentTable = new FeatureCollectionTable(fields, currentGeometryType, 
+                mapView.getSpatialReference());
+            
+            // 确保表已经初始化
+            currentTable.loadAsync();
+            currentTable.addDoneLoadingListener(() -> {
+                try {
+                    if (currentTable.getLoadStatus() == LoadStatus.LOADED) {
+                        // 创建要素图层
+                        FeatureLayer featureLayer = new FeatureLayer(currentTable);
+                        
+                        // 设置图层样式
+                        switch (currentGeometryType) {
+                            case POINT:
+                                SimpleMarkerSymbol pointSymbol = new SimpleMarkerSymbol(
+                                    SimpleMarkerSymbol.Style.CIRCLE, Color.RED, 10);
+                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(pointSymbol));
+                                break;
+                            
+                            case POLYLINE:
+                                SimpleLineSymbol lineSymbol = new SimpleLineSymbol(
+                                    SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
+                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(lineSymbol));
+                                break;
+                            
+                            case POLYGON:
+                                SimpleLineSymbol outlineSymbol = new SimpleLineSymbol(
+                                    SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
+                                SimpleFillSymbol fillSymbol = new SimpleFillSymbol(
+                                    SimpleFillSymbol.Style.SOLID, 
+                                    Color.argb(100, 0, 0, 255), 
+                                    outlineSymbol);
+                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(fillSymbol));
+                                break;
+                        }
+
+                        // 生成图层名称
+                        String layerName = "新建" + getGeometryTypeName() + System.currentTimeMillis();
+                        featureLayer.setName(layerName);
+                        
+                        // 添加图层到地图
+                        mapView.getMap().getOperationalLayers().add(featureLayer);
+
+                        // 通知主活动图层已创建
+                        if (layerCreationCallback != null) {
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                layerCreationCallback.onLayerCreated(featureLayer, layerName);
+                            });
+                        }
+
+                        // 保存当前图层引用
+                        currentLayer = featureLayer;
+
+                        Log.d(TAG, "新建图层创建成功: " + layerName);
+                    } else {
+                        String error = currentTable.getLoadError() != null ? 
+                            currentTable.getLoadError().getMessage() : "未知错误";
+                        Log.e(TAG, "要素表加载失败: " + error);
+                        throw new RuntimeException("要素表加载失败: " + error);
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "创建图层失败: " + e.getMessage());
+                    throw new RuntimeException("创建图层失败: " + e.getMessage());
+                }
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, "创建图层失败: " + e.getMessage());
+            throw new RuntimeException("创建图层失败: " + e.getMessage());
+        }
+    }
+
+    private String getGeometryTypeName() {
+        switch (currentGeometryType) {
+            case POINT:
+                return "点要素";
+            case POLYLINE:
+                return "线要素";
+            case POLYGON:
+                return "面要素";
+            default:
+                return "要素";
+        }
+    }
+
+    public void saveAsShapefile(String fileName) {
+        // 实现保存为Shapefile的逻辑
+        // 这部分需要额外的实现...
+        Toast.makeText(context, "保存功能待实现", Toast.LENGTH_SHORT).show();
+    }
+
+    public boolean isEditing() {
+        return isEditing;
+    }
+
+    public void setLayerCreationCallback(LayerCreationCallback callback) {
+        this.layerCreationCallback = callback;
+    }
+
+    // 添加 createGeometry 方法
+    private com.esri.arcgisruntime.geometry.Geometry createGeometry() {
+        if (points == null || points.size() < getMinimumPointsRequired()) {
+            throw new IllegalStateException("点数不足以创建几何体");
+        }
+
+        switch (currentGeometryType) {
+            case POINT:
+                return points.get(0);
+            case POLYLINE:
+                return new Polyline(points);
+            case POLYGON:
+                return new Polygon(points);
+            default:
+                throw new IllegalStateException("不支持的几何类型: " + currentGeometryType);
+        }
+    }
+
+    // 添加生成 ObjectID 的方法
+    private static int nextObjectId = 1;
+    private synchronized int generateObjectId() {
+        return nextObjectId++;
+    }
+
+    // 添加生成 FeatureID 的方法
+    private static int nextFeatureId = 1;
+    private synchronized int generateFeatureId() {
+        return nextFeatureId++;
     }
 } 

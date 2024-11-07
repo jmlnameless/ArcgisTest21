@@ -12,6 +12,9 @@ import com.esri.arcgisruntime.loadable.LoadStatus;
 import com.esri.arcgisruntime.mapping.ArcGISMap;
 import com.esri.arcgisruntime.mapping.view.MapView;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +49,12 @@ public class LayerManager {
     }
 
     public void loadShapefileLayer(@NonNull String path, @NonNull LayerLoadCallback callback) {
+        // 检查地图是否已初始化
+        if (map == null || map.getOperationalLayers() == null) {
+            postError(callback, "地图未正确初始化");
+            return;
+        }
+
         // 检查图层数量限制
         if (layers.size() >= MAX_LAYERS) {
             postError(callback, "图层数量已达到上限，请先移除一些图层");
@@ -187,5 +196,49 @@ public class LayerManager {
             layers.clear();
             System.gc(); // 建议垃圾回收
         });
+    }
+
+    // 在 LayerManager 类中添加导出方法
+    public void exportLayerToShapefile(FeatureLayer layer, String outputPath) {
+        try {
+            // 获取要素表
+            ShapefileFeatureTable featureTable = (ShapefileFeatureTable) layer.getFeatureTable();
+            
+            // 创建输出目录
+            File outputDir = new File(outputPath).getParentFile();
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
+
+            // 复制必要的文件
+            String basePath = outputPath.substring(0, outputPath.length() - 4);
+            String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
+            
+            for (String ext : extensions) {
+                File sourceFile = new File(featureTable.getPath().substring(0, 
+                    featureTable.getPath().length() - 4) + ext);
+                File destFile = new File(basePath + ext);
+                
+                if (sourceFile.exists()) {
+                    copyFile(sourceFile, destFile);
+                }
+            }
+
+            Log.d(TAG, "图层导出成功: " + outputPath);
+        } catch (Exception e) {
+            Log.e(TAG, "导出图层失败: " + e.getMessage());
+            throw new RuntimeException("导出图层失败: " + e.getMessage());
+        }
+    }
+
+    private void copyFile(File source, File dest) throws IOException {
+        try (FileInputStream fis = new FileInputStream(source);
+             FileOutputStream fos = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = fis.read(buffer)) > 0) {
+                fos.write(buffer, 0, length);
+            }
+        }
     }
 } 

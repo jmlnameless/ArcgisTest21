@@ -24,7 +24,7 @@ import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleFillSymbol;
 import com.esri.arcgisruntime.symbology.SimpleLineSymbol;
 import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
-import com.esri.arcgisruntime.symbology.Renderer;
+import com.esri.arcgisruntime.symbology.SimpleRenderer;
 import com.esri.arcgisruntime.concurrent.ListenableFuture;
 import com.esri.arcgisruntime.loadable.LoadStatus;
 import com.esri.arcgisruntime.data.ServiceFeatureTable;
@@ -165,45 +165,16 @@ public class FeatureEditor {
                         throw new IllegalStateException("没有要素可添加");
                     }
                     for (Point point : pointFeatures) {
-                        Map<String, Object> attributes = new HashMap<>();
-                        attributes.put("OBJECTID", generateObjectId());
-                        attributes.put("FEAT_NAME", "点要素");
-                        attributes.put("FEAT_DESC", "自动创建的点要素");
-                        attributes.put("FEAT_ID", generateFeatureId());
-                        
-                        Feature feature = currentTable.createFeature(attributes, point);
-                        ListenableFuture<Void> future = currentTable.addFeatureAsync(feature);
-                        future.addDoneListener(() -> {
-                            try {
-                                future.get();
-                                Log.d(TAG, "点要素添加成功");
-                            } catch (Exception e) {
-                                Log.e(TAG, "添加点要素失败: " + e.getMessage());
-                            }
-                        });
+                        addFeatureWithAttributes(point);
                     }
                     break;
                     
                 default:
                     // 处理线和面要素
                     if (points.size() >= getMinimumPointsRequired()) {
-                        Map<String, Object> attributes = new HashMap<>();
-                        attributes.put("OBJECTID", generateObjectId());
-                        attributes.put("FEAT_NAME", getGeometryTypeName());
-                        attributes.put("FEAT_DESC", "自动创建的" + getGeometryTypeName());
-                        attributes.put("FEAT_ID", generateFeatureId());
-                        
-                        com.esri.arcgisruntime.geometry.Geometry geometry = createGeometry();
-                        Feature feature = currentTable.createFeature(attributes, geometry);
-                        ListenableFuture<Void> future = currentTable.addFeatureAsync(feature);
-                        future.addDoneListener(() -> {
-                            try {
-                                future.get();
-                                Log.d(TAG, getGeometryTypeName() + "添加成功");
-                            } catch (Exception e) {
-                                Log.e(TAG, "添加要素失败: " + e.getMessage());
-                            }
-                        });
+                        for (Point point : points) {
+                            addFeatureWithAttributes(point);
+                        }
                     } else {
                         throw new IllegalStateException("点数不足以创建要素");
                     }
@@ -230,6 +201,17 @@ public class FeatureEditor {
                 Toast.makeText(context, "完成绘制失败: " + e.getMessage(), Toast.LENGTH_SHORT).show()
             );
         }
+    }
+
+    private void addFeatureWithAttributes(Point point) {
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("OBJECTID", generateObjectId());
+        attributes.put("NAME", "要素_" + generateFeatureId());
+        attributes.put("DESCRIPTION", "自动创建的" + getGeometryTypeName());
+        attributes.put("FEATURE_ID", generateFeatureId());
+        
+        Feature feature = currentTable.createFeature(attributes, point);
+        currentTable.addFeatureAsync(feature);
     }
 
     private int getMinimumPointsRequired() {
@@ -259,13 +241,14 @@ public class FeatureEditor {
             // 创建字段列表
             List<Field> fields = new ArrayList<>();
             
+            // 使用Field的静态方法创建字段
             // 添加 OBJECTID 字段（必需的）
             fields.add(Field.createInteger("OBJECTID", "Object ID"));
             
             // 添加其他字段
-            fields.add(Field.createString("FEAT_NAME", "名称", 50));
-            fields.add(Field.createString("FEAT_DESC", "描述", 255));
-            fields.add(Field.createInteger("FEAT_ID", "编号"));
+            fields.add(Field.createString("NAME", "名称", 50));
+            fields.add(Field.createString("DESCRIPTION", "描述", 255));
+            fields.add(Field.createInteger("FEATURE_ID", "要素编号"));
             
             // 创建要素集合表，确保使用正确的空间参考
             currentTable = new FeatureCollectionTable(fields, currentGeometryType, 
@@ -284,13 +267,13 @@ public class FeatureEditor {
                             case POINT:
                                 SimpleMarkerSymbol pointSymbol = new SimpleMarkerSymbol(
                                     SimpleMarkerSymbol.Style.CIRCLE, Color.RED, 10);
-                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(pointSymbol));
+                                featureLayer.setRenderer(new SimpleRenderer(pointSymbol));
                                 break;
                             
                             case POLYLINE:
                                 SimpleLineSymbol lineSymbol = new SimpleLineSymbol(
                                     SimpleLineSymbol.Style.SOLID, Color.BLUE, 2);
-                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(lineSymbol));
+                                featureLayer.setRenderer(new SimpleRenderer(lineSymbol));
                                 break;
                             
                             case POLYGON:
@@ -300,12 +283,13 @@ public class FeatureEditor {
                                     SimpleFillSymbol.Style.SOLID, 
                                     Color.argb(100, 0, 0, 255), 
                                     outlineSymbol);
-                                featureLayer.setRenderer(new com.esri.arcgisruntime.symbology.SimpleRenderer(fillSymbol));
+                                featureLayer.setRenderer(new SimpleRenderer(fillSymbol));
                                 break;
                         }
 
-                        // 生成图层名称
-                        String layerName = "新建" + getGeometryTypeName() + System.currentTimeMillis();
+                        // 生成唯一的图层名称
+                        String layerName = "新建" + getGeometryTypeName() + "_" + 
+                            System.currentTimeMillis();
                         featureLayer.setName(layerName);
                         
                         // 添加图层到地图

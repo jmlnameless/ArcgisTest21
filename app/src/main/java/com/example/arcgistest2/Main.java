@@ -3,18 +3,31 @@ package com.example.arcgistest2;
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.app.AlertDialog;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -31,6 +44,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.documentfile.provider.DocumentFile;
 
 import com.esri.arcgisruntime.concurrent.ListenableFuture;
 import com.esri.arcgisruntime.data.Feature;
@@ -38,85 +52,44 @@ import com.esri.arcgisruntime.data.FeatureCollectionTable;
 import com.esri.arcgisruntime.data.FeatureQueryResult;
 import com.esri.arcgisruntime.data.Field;
 import com.esri.arcgisruntime.data.QueryParameters;
-import com.esri.arcgisruntime.data.ShapefileFeatureTable;
 import com.esri.arcgisruntime.geometry.Envelope;
 import com.esri.arcgisruntime.geometry.GeometryEngine;
 import com.esri.arcgisruntime.geometry.GeometryType;
 import com.esri.arcgisruntime.geometry.Point;
 import com.esri.arcgisruntime.geometry.SpatialReferences;
 import com.esri.arcgisruntime.layers.FeatureLayer;
-import com.esri.arcgisruntime.layers.Layer;
 import com.esri.arcgisruntime.loadable.LoadStatus;
 import com.esri.arcgisruntime.mapping.ArcGISMap;
-import com.esri.arcgisruntime.mapping.view.BackgroundGrid;
 import com.esri.arcgisruntime.mapping.view.DefaultMapViewOnTouchListener;
 import com.esri.arcgisruntime.mapping.view.MapView;
 import com.esri.arcgisruntime.symbology.SimpleFillSymbol;
 import com.esri.arcgisruntime.symbology.SimpleLineSymbol;
-import com.esri.arcgisruntime.symbology.SimpleRenderer;
 import com.esri.arcgisruntime.symbology.SimpleMarkerSymbol;
+import com.esri.arcgisruntime.symbology.SimpleRenderer;
 import com.example.arcgistest2.base.BaseMapActivity;
 import com.example.arcgistest2.editor.FeatureEditor;
+import com.example.arcgistest2.layer.LayerManager;
+import com.example.arcgistest2.legend.LegendManager;
+import com.example.arcgistest2.ui.UIManager;
+import com.example.arcgistest2.utils.FileManager;
+import com.example.arcgistest2.utils.PermissionManager;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.navigation.NavigationView;
-import com.google.android.material.textfield.TextInputEditText;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
+import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
-
-import android.animation.ObjectAnimator;
-import android.view.animation.AccelerateDecelerateInterpolator;
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
-
-import com.esri.arcgisruntime.geometry.Geometry;
-
-import com.example.arcgistest2.layer.LayerManager;
-
-import android.content.CursorLoader;
-import android.database.Cursor;
-import android.net.Uri;
-import android.os.Build;
-import android.provider.OpenableColumns;
-
-import android.provider.MediaStore;
-
-import androidx.documentfile.provider.DocumentFile;
-
-import android.text.Editable;
-import android.text.TextWatcher;
-
-import android.content.ContentResolver;
-
-import android.content.ContentUris;
-
-import android.os.Environment;
-
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-
-import com.example.arcgistest2.legend.LegendManager;
-
-import com.example.arcgistest2.ui.UIManager;
-import com.example.arcgistest2.utils.PermissionManager;
-import com.example.arcgistest2.utils.PermissionCallback;
-import com.example.arcgistest2.utils.FileManager;
 
 public class Main extends BaseMapActivity {
 
@@ -126,74 +99,18 @@ public class Main extends BaseMapActivity {
     private ListView layerListView;//图层列表
     private Button layerListButton;
     private Button tuli;
-    // 需要检查的文件列表(实际只需要.shx .shp .dbf .prj)
-    private final List<String> filesToCheck = Arrays.asList(
-            "测试数据.shp",
-            "测试数据.xml",
-            "测试数据.shx",
-            "测试数据.dbf",
-            "测试数据.prj",
-            "测试数据.shp",
-            "测试数据.cpg",
-            "测试数据.sbn",
-            "测试数据.sbx",
-            "sheng2022.shp",
-            "sheng2022.prj",
-            "sheng2022.shx",
-            "sheng2022.dbf",
-            "sheng2022.xml",
-            "sheng2022.cpg",
-            "sheng2022.sbn",
-            "sheng2022.sbx",
-            "cs2022.shp",
-            "cs2022.prj",
-            "cs2022.shx",
-            "cs2022.dbf",
-            "cs2022.xml",
-            "cs2022.cpg",
-            "cs2022.sbn",
-            "cs2022.sbx"
-    );
 
     private DrawerLayout mDrawerLayout;
     private NavigationView navigationView;
 
-    // 添加图层管理相关变量
+    // 添加图层管关变量
     private ArcGISMap map;
     private List<FeatureLayer> featureLayers = new ArrayList<>();
     private ArrayAdapter<String> layerListAdapter;
     private List<String> layerNames = new ArrayList<>();
 
-    // 定义图层配置
-    private class LayerConfig {
-        String fileName;
-        String displayName;
-        int lineColor;
-        float lineWidth;
-        int fillColor;
-
-        LayerConfig(String fileName, String displayName, int lineColor, float lineWidth, int fillColor) {
-            this.fileName = fileName;
-            this.displayName = displayName;
-            this.lineColor = lineColor;
-            this.lineWidth = lineWidth;
-            this.fillColor = fillColor;
-        }
-    }
-
-    // 预定义图层配置
-    private final List<LayerConfig> defaultLayers = Arrays.asList(
-        new LayerConfig("sheng2022", "省界2022", Color.BLUE, 2.0f, Color.argb(0, 0, 0, 0)),
-        new LayerConfig("cs2022", "城市2022", Color.RED, 1.5f, Color.argb(30, 255, 0, 0)),
-        new LayerConfig("测试数据", "测试数据", Color.GREEN, 1.0f, Color.argb(50, 0, 255, 0))
-    );
-
-    // 在类的开头添加
     private FeatureEditor featureEditor;
     private boolean isDrawing = false;
-
-    // 在 Main 类中添加 LayerManager
-    private LayerManager layerManager;
 
     // 在类的开头添加常量
     private static final int PICK_SHAPEFILE_REQUEST = 1001;
@@ -239,6 +156,9 @@ public class Main extends BaseMapActivity {
     // 在类的开头添加成员变量
     private Map<Integer, View> expandableLayouts;
 
+    // 管理器
+    private LayerManager layerManager;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         initializePermissionManager();
@@ -282,6 +202,9 @@ public class Main extends BaseMapActivity {
             
             // 设置所有按钮的点击监听器
             setupButtons();
+            
+            // 设置地图触摸监听器
+            setupMapTouchListener();
             
             Log.d(TAG, "UI setup completed");
         } catch (Exception e) {
@@ -346,7 +269,7 @@ public class Main extends BaseMapActivity {
             listView.setAdapter(layerListAdapter);
             listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
             
-            // 添加图层选择监听器
+            // 添加图层择监听器
             listView.setOnItemClickListener((parent, view, position, id) -> {
                 if (position < featureLayers.size()) {
                     FeatureLayer layer = featureLayers.get(position);
@@ -361,27 +284,51 @@ public class Main extends BaseMapActivity {
 
     @Override
     protected void initializeManagers() {
-        // 确保地图已经创建
-        if (map == null || mapView == null) {
-            Log.e(TAG, "地图未正确初始化");
-            return;
-        }
-
         try {
-            // 初始化所有管理器
-            layerManager = new LayerManager(this, mapView, map);
-            featureEditor = new FeatureEditor(mapView, this);
-            locationManager = new com.example.arcgistest2.location.LocationManager(this, mapView);
-            legendManager = new LegendManager(this);
-            uiManager = new UIManager(this, this::handleButtonClick);
-            
-            // 初始化 FileManager
-            String[] requiredFilesArray = filesToCheck.toArray(new String[0]);
-            fileManager = new FileManager(this, requiredFilesArray);
+            if (map == null || mMapView == null) {
+                Log.e(TAG, "Map or MapView is null");
+                return;
+            }
 
-            Log.d(TAG, "所有管理器初始化成功");
+            if (map.getLoadStatus() != LoadStatus.LOADED) {
+                Log.e(TAG, "Map is not loaded yet");
+                return;
+            }
+
+            // 初始化所有管理器
+            layerManager = new LayerManager(this, mMapView, map);
+            Log.d(TAG, "LayerManager initialized successfully");
+
+            featureEditor = new FeatureEditor(mMapView, this);
+            Log.d(TAG, "FeatureEditor initialized");
+
+            legendManager = new LegendManager(this);
+            Log.d(TAG, "LegendManager initialized");
+
+            uiManager = new UIManager(this, this::handleButtonClick);
+            Log.d(TAG, "UIManager initialized");
+
+            permissionManager = new PermissionManager(this, PERMISSION_REQUEST_CODE, 
+                new PermissionManager.PermissionCallback() {
+                    @Override
+                    public void onPermissionsGranted() {
+                        // 权限已授予，不需要再次初始化app
+                        Log.d(TAG, "Permissions granted");
+                    }
+
+                    @Override
+                    public void onPermissionsDenied() {
+                        showSettingsDialog();
+                    }
+                });
+            Log.d(TAG, "PermissionManager initialized");
+
+            locationManager = new com.example.arcgistest2.location.LocationManager(this, mMapView);
+            Log.d(TAG, "LocationManager initialized");
+
+            Log.d(TAG, "All managers initialized successfully");
         } catch (Exception e) {
-            Log.e(TAG, "初始化管理器失败: " + e.getMessage());
+            Log.e(TAG, "Error initializing managers: " + e.getMessage());
             Toast.makeText(this, "初始化管理器失败: " + e.getMessage(), 
                 Toast.LENGTH_SHORT).show();
         }
@@ -456,7 +403,7 @@ public class Main extends BaseMapActivity {
                 Log.w(TAG, "Unhandled button click: " + view.getId());
             }
             
-            // 添加按钮动画效果
+            // 加按钮动画效果
             animateButton(view);
             
         } catch (Exception e) {
@@ -487,30 +434,23 @@ public class Main extends BaseMapActivity {
             map = new ArcGISMap(SpatialReferences.getWgs84());
             mMapView.setMap(map);
             
-            // 初始化管理器
-            initializeManagers();
-            
-            // 初始化UI组件
-            setupUI();
-            
-            // 设置导航抽屉
-            setupNavigationDrawer();
-            
-            // 等待地图加载完成后再加载图层
+            // 等待地图加载完成
             map.addDoneLoadingListener(() -> {
                 if (map.getLoadStatus() == LoadStatus.LOADED) {
-                    // 复制文件和加载图层
-                    if (fileManager != null) {
-                        fileManager.copyAssetsToInternalStorage();
-                    }
-                    if (layerManager != null) {
-                        loadInitialLayers();
-                    }
+                    Log.d(TAG, "Map loaded successfully");
+                    // 地图加载完成后初始化管理器
+                    initializeManagers();
+                    // 初始化UI组件
+                    setupUI();
+                    // 设置导航抽屉
+                    setupNavigationDrawer();
+                } else {
+                    Log.e(TAG, "Map failed to load: " + map.getLoadError().getMessage());
                 }
             });
             map.loadAsync();
             
-            Log.d(TAG, "App initialization completed");
+            Log.d(TAG, "App initialization started");
         } catch (Exception e) {
             Log.e(TAG, "Error initializing app: " + e.getMessage());
             Toast.makeText(this, "初始化失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -520,10 +460,10 @@ public class Main extends BaseMapActivity {
     private void showSettingsDialog() {
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("权限被拒绝")
-            .setMessage("请在设置中手动授予所需权限，否则应用将无法正常工作。")
+            .setMessage("请在设置中手动授予所需权限，否则应用将无法正常作。")
             .setPositiveButton("去设置", (dialogInterface, i) -> {
                 dialogInterface.dismiss();
-                // 打开应用设置页面
+                // 开应用设置页面
                 Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 Uri uri = Uri.fromParts("package", getPackageName(), null);
                 intent.setData(uri);
@@ -629,59 +569,17 @@ public class Main extends BaseMapActivity {
 
     // ... 必要的回调方法
 
-    private void loadInitialLayers() {
-        if (layerManager == null) {
-            Log.e(TAG, "LayerManager未初始化");
-            return;
-        }
-
-        for (LayerConfig config : defaultLayers) {
-            String shapefilePath = getInternalStorageFilePath(this, config.fileName + ".shp");
-            layerManager.loadShapefileLayer(shapefilePath, new LayerManager.LayerLoadCallback() {
-                @Override
-                public void onSuccess(FeatureLayer layer) {
-                    featureLayers.add(layer);
-                    layerNames.add(config.displayName);
-                    runOnUiThread(() -> {
-                        layerListAdapter.notifyDataSetChanged();
-                        
-                        // 默认选中图层
-                        ListView layerListView = findViewById(R.id.layerListView);
-                        layerListView.setItemChecked(layerNames.size() - 1, true);
-                        
-                        // 如果是第一个图层，缩放到其范围
-                        if (featureLayers.size() == 1) {
-                            layerManager.zoomToLayer(layer);
-                        }
-                    });
-                }
-
-                @Override
-                public void onError(String error) {
-                    Log.e(TAG, error);
-                    runOnUiThread(() -> 
-                        Toast.makeText(Main.this, error, Toast.LENGTH_SHORT).show()
-                    );
-                }
-            });
-        }
-    }
-
-    // 添加获取内部存储文件路径的辅助方法
-    private String getInternalStorageFilePath(Context context, String fileName) {
-        File fileDir = context.getFilesDir();
-        File file = new File(fileDir, fileName);
-        return file.getAbsolutePath();
-    }
-
     private void openFilePicker() {
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.setType("*/*");
         intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // 允许选择多个文件
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         
         try {
             startActivityForResult(
-                Intent.createChooser(intent, "选择Shapefile文件"),
+                Intent.createChooser(intent, "选择Shapefile相关文件(.shp, .shx, .dbf, .prj)"),
                 PICK_SHAPEFILE_REQUEST
             );
         } catch (android.content.ActivityNotFoundException ex) {
@@ -696,7 +594,7 @@ public class Main extends BaseMapActivity {
         if (resultCode == RESULT_OK && data != null) {
             switch (requestCode) {
                 case PICK_SHAPEFILE_REQUEST:
-                    importShapefile(data.getData());
+                    handleMultipleFileSelection(data);
                     break;
                 case PICK_GPS_FILE:
                     handleGPSFile(data.getData());
@@ -717,211 +615,272 @@ public class Main extends BaseMapActivity {
         }
     }
 
-    private void importShapefile(Uri uri) {
+    private void handleMultipleFileSelection(Intent data) {
         try {
-            String fileName = getFileName(uri);
-            if (!fileName.toLowerCase().endsWith(".shp")) {
+            // 检查LayerManager是否已初始化
+            if (layerManager == null) {
+                Log.e(TAG, "LayerManager is not initialized");
+                Toast.makeText(this, "LayerManager未初始化，请稍后重试", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 检查地图状态
+            if (map == null || map.getLoadStatus() != LoadStatus.LOADED) {
+                Log.e(TAG, "Map is not ready");
+                Toast.makeText(this, "地图未准备就绪，请稍后重试", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 创建临时目录
+            File tempDir = new File(getExternalFilesDir(null), "shapefiles");
+            if (!tempDir.exists()) {
+                tempDir.mkdirs();
+            }
+
+            String shpFileName = null;
+            Map<String, Uri> selectedFiles = new HashMap<>();
+
+            // 处理多个文件
+            if (data.getClipData() != null) {
+                ClipData clipData = data.getClipData();
+                for (int i = 0; i < clipData.getItemCount(); i++) {
+                    Uri uri = clipData.getItemAt(i).getUri();
+                    String fileName = getFileName(uri);
+                    String ext = fileName.substring(fileName.lastIndexOf(".")).toLowerCase();
+                    selectedFiles.put(ext, uri);
+                    
+                    if (ext.equals(".shp")) {
+                        shpFileName = fileName.substring(0, fileName.lastIndexOf("."));
+                    }
+                }
+            } else if (data.getData() != null) {
+                Uri uri = data.getData();
+                String fileName = getFileName(uri);
+                String ext = fileName.substring(fileName.lastIndexOf(".")).toLowerCase();
+                selectedFiles.put(ext, uri);
+                
+                if (ext.equals(".shp")) {
+                    shpFileName = fileName.substring(0, fileName.lastIndexOf("."));
+                }
+            }
+
+            // 检查是否选择了.shp文件
+            if (shpFileName == null) {
                 Toast.makeText(this, "请选择.shp文件", Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            // 创建导入目录
-            File importDir = new File(getFilesDir(), "imported_layers");
-            if (!importDir.exists()) {
-                importDir.mkdirs();
-            }
-
-            // 复制文件到应用私有目录
-            File destFile = new File(importDir, fileName);
-            copyFileFromUri(uri, destFile);
-
-            // 复制相关文件
-            String baseName = fileName.substring(0, fileName.length() - 4);
-            String[] extensions = {".shx", ".dbf", ".prj"};
-            for (String ext : extensions) {
-                Uri relatedFileUri = findRelatedFile(uri, baseName + ext);
-                if (relatedFileUri != null) {
-                    File destRelatedFile = new File(importDir, baseName + ext);
-                    copyFileFromUri(relatedFileUri, destRelatedFile);
+            // 检查必需的文件是否都已选择
+            String[] requiredExts = {".shp", ".shx", ".dbf", ".prj"};
+            for (String ext : requiredExts) {
+                if (!selectedFiles.containsKey(ext)) {
+                    Toast.makeText(this, "缺少必需的文件: " + ext, Toast.LENGTH_SHORT).show();
+                    return;
                 }
             }
 
+            // 复制所有选中的文件
+            for (Map.Entry<String, Uri> entry : selectedFiles.entrySet()) {
+                File destFile = new File(tempDir, shpFileName + entry.getKey());
+                copyUriToFile(entry.getValue(), destFile);
+            }
+
             // 加载图层
-            layerManager.loadShapefileLayer(destFile.getAbsolutePath(), new LayerManager.LayerLoadCallback() {
+            String shpFilePath = new File(tempDir, shpFileName + ".shp").getAbsolutePath();
+            layerManager.loadShapefileLayer(shpFilePath, new LayerManager.LayerLoadCallback() {
                 @Override
                 public void onSuccess(FeatureLayer layer) {
                     featureLayers.add(layer);
-                    layerNames.add(fileName);
+                    layerNames.add(layer.getName());
                     runOnUiThread(() -> {
                         layerListAdapter.notifyDataSetChanged();
-                        // 默认选中新图层
                         ListView listView = findViewById(R.id.layerListView);
                         listView.setItemChecked(layerNames.size() - 1, true);
+                        layerManager.zoomToLayer(layer);
+                        Toast.makeText(Main.this, "图层加载成功", Toast.LENGTH_SHORT).show();
                     });
                 }
 
                 @Override
                 public void onError(String error) {
+                    Log.e(TAG, "Layer load error: " + error);
                     runOnUiThread(() -> 
-                        Toast.makeText(Main.this, "加载图层失败: " + error, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(Main.this, "加载图层失败: " + error, 
+                            Toast.LENGTH_SHORT).show()
                     );
                 }
             });
 
         } catch (Exception e) {
-            Toast.makeText(this, "导入文件失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "处理文件失败: " + e.getMessage());
+            Toast.makeText(this, "处理文件失败: " + e.getMessage(), 
+                Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void copyFileFromUri(Uri uri, File destFile) throws IOException {
+    private void copyUriToFile(Uri uri, File destFile) throws IOException {
         try (InputStream inputStream = getContentResolver().openInputStream(uri);
              FileOutputStream outputStream = new FileOutputStream(destFile)) {
             if (inputStream == null) {
-                throw new IOException("无法读取件");
+                throw new IOException("Cannot open input stream");
             }
             byte[] buffer = new byte[8192];
             int length;
             while ((length = inputStream.read(buffer)) > 0) {
                 outputStream.write(buffer, 0, length);
             }
+            outputStream.flush();
         }
     }
 
-    private Uri findRelatedFile(Uri originalUri, String targetFileName) {
+    // 添加文件复制方法
+    private void copyFile(File sourceFile, File destFile) throws IOException {
+        if (!destFile.exists()) {
+            destFile.createNewFile();
+        }
+        
+        try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(sourceFile));
+             BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(destFile))) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = bis.read(buffer)) > 0) {
+                bos.write(buffer, 0, length);
+            }
+            bos.flush();
+        }
+    }
+
+    // 添加检查Shapefile相关文件的方法
+    private boolean checkShapefileFiles(String basePath) {
+        String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
+        for (String ext : extensions) {
+            File file = new File(basePath + ext);
+            if (!file.exists()) {
+                Log.e(TAG, "Missing file: " + basePath + ext);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // 改进获取真实文件路径的方法
+    private String getRealPathFromUri(Uri uri) {
         try {
-            String originalPath = getActualPath(originalUri);
-            if (originalPath != null) {
-                File originalFile = new File(originalPath);
-                File parentDir = originalFile.getParentFile();
-                if (parentDir != null && parentDir.exists()) {
-                    File targetFile = new File(parentDir, targetFileName);
-                    if (targetFile.exists()) {
-                        return Uri.fromFile(targetFile);
+            Log.d(TAG, "Getting real path for URI: " + uri.toString());
+            String path = null;
+
+            // 处理 "content://" URI
+            if ("content".equals(uri.getScheme())) {
+                String[] projection = {MediaStore.MediaColumns.DATA};
+                try (Cursor cursor = getContentResolver().query(uri, projection, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
+                        path = cursor.getString(columnIndex);
+                        Log.d(TAG, "Path from content resolver: " + path);
                     }
                 }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "查找相关文件失败: " + e.getMessage());
-        }
-        return null;
-    }
-
-    private String getActualPath(Uri uri) {
-        try {
-            if ("file".equals(uri.getScheme())) {
-                return uri.getPath();
             }
             
-            if ("content".equals(uri.getScheme())) {
-                try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-                    if (cursor != null && cursor.moveToFirst()) {
-                        int dataIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATA);
-                        if (dataIndex != -1) {
-                            return cursor.getString(dataIndex);
+            // 处理 "file://" URI
+            if (path == null && "file".equals(uri.getScheme())) {
+                path = uri.getPath();
+                Log.d(TAG, "Path from file URI: " + path);
+            }
+
+            // 如果还是获取不到路径，尝试使用DocumentFile
+            if (path == null) {
+                DocumentFile documentFile = DocumentFile.fromSingleUri(this, uri);
+                if (documentFile != null) {
+                    // 获取文件的显示名称
+                    String fileName = documentFile.getName();
+                    // 创建临时目录
+                    File tempDir = new File(getFilesDir(), "temp_shapefiles");
+                    if (!tempDir.exists()) {
+                        tempDir.mkdirs();
+                    }
+                    // 创建临时文件
+                    File tempFile = new File(tempDir, fileName);
+                    // 复制文件内容
+                    try (InputStream is = getContentResolver().openInputStream(uri);
+                         FileOutputStream fos = new FileOutputStream(tempFile)) {
+                        if (is == null) throw new IOException("Cannot open input stream");
+                        byte[] buffer = new byte[8192];
+                        int length;
+                        while ((length = is.read(buffer)) > 0) {
+                            fos.write(buffer, 0, length);
                         }
                     }
+                    path = tempFile.getAbsolutePath();
+                    Log.d(TAG, "Path from document file: " + path);
                 }
             }
-        } catch (Exception e) {
-            Log.e(TAG, "获取文件路径失败: " + e.getMessage());
-        }
-        return null;
-    }
 
-    private String getFileName(Uri uri) {
-        String result = null;
-        if ("content".equals(uri.getScheme())) {
-            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (nameIndex != -1) {
-                        result = cursor.getString(nameIndex);
-                    }
+            if (path != null) {
+                File file = new File(path);
+                if (!file.exists()) {
+                    Log.e(TAG, "File does not exist: " + path);
+                    return null;
                 }
+                Log.d(TAG, "File exists at path: " + path);
+            } else {
+                Log.e(TAG, "Could not resolve path for URI");
             }
+
+            return path;
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting real path: " + e.getMessage(), e);
+            return null;
         }
-        if (result == null) {
-            result = uri.getPath();
-            int cut = result != null ? result.lastIndexOf('/') : -1;
-            if (cut != -1) {
-                result = result.substring(cut + 1);
-            }
-        }
-        return result != null ? result : "unknown";
     }
 
     // 修改 handleGPSFile 方法
     private void handleGPSFile(Uri uri) {
         try {
-            String fileName = getFileName(uri);
-            if (!fileName.toLowerCase().endsWith(".shp")) {
+            String filePath = getRealPathFromUri(uri);
+            if (filePath != null && filePath.toLowerCase().endsWith(".shp")) {
+                layerManager.loadShapefileLayer(filePath, new LayerManager.LayerLoadCallback() {
+                    @Override
+                    public void onSuccess(FeatureLayer layer) {
+                        // 设置GPS点的样式
+                        SimpleMarkerSymbol gpsSymbol = new SimpleMarkerSymbol(
+                            SimpleMarkerSymbol.Style.CIRCLE, 
+                            Color.RED, 
+                            8);
+                        gpsSymbol.setOutline(new SimpleLineSymbol(
+                            SimpleLineSymbol.Style.SOLID,
+                            Color.WHITE,
+                            1));
+                        layer.setRenderer(new SimpleRenderer(gpsSymbol));
+
+                        // 添加到图层列表
+                        featureLayers.add(layer);
+                        layerNames.add("GPS点: " + layer.getName());
+                        runOnUiThread(() -> {
+                            layerListAdapter.notifyDataSetChanged();
+                            ListView listView = findViewById(R.id.layerListView);
+                            listView.setItemChecked(layerNames.size() - 1, true);
+                            layerManager.zoomToLayer(layer);
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        runOnUiThread(() -> 
+                            Toast.makeText(Main.this, "加载GPS数据失败: " + error, 
+                                Toast.LENGTH_SHORT).show()
+                        );
+                    }
+                });
+            } else {
                 Toast.makeText(this, "请选择.shp文件", Toast.LENGTH_SHORT).show();
-                return;
             }
-
-            // 创建导入目录
-            File importDir = new File(getFilesDir(), "gps_layers");
-            if (!importDir.exists()) {
-                importDir.mkdirs();
-            }
-
-            // 复制文件到应用私有目录
-            File destFile = new File(importDir, fileName);
-            copyFileFromUri(uri, destFile);
-
-            // 复制相关文件
-            String baseName = fileName.substring(0, fileName.length() - 4);
-            String[] extensions = {".shx", ".dbf", ".prj"};
-            for (String ext : extensions) {
-                Uri relatedFileUri = findRelatedFile(uri, baseName + ext);
-                if (relatedFileUri != null) {
-                    File destRelatedFile = new File(importDir, baseName + ext);
-                    copyFileFromUri(relatedFileUri, destRelatedFile);
-                }
-            }
-
-            // 加载GPS图层，使用特殊的符号样式
-            layerManager.loadShapefileLayer(destFile.getAbsolutePath(), new LayerManager.LayerLoadCallback() {
-                @Override
-                public void onSuccess(FeatureLayer layer) {
-                    // 设置GPS点的样式
-                    SimpleMarkerSymbol gpsSymbol = new SimpleMarkerSymbol(
-                        SimpleMarkerSymbol.Style.CIRCLE, 
-                        Color.RED, 
-                        8);  // 较小的点大小
-                    gpsSymbol.setOutline(new SimpleLineSymbol(
-                        SimpleLineSymbol.Style.SOLID,
-                        Color.WHITE,
-                        1));
-                    layer.setRenderer(new SimpleRenderer(gpsSymbol));
-
-                    // 添加到图层列表
-                    featureLayers.add(layer);
-                    layerNames.add("GPS点: " + baseName);
-                    runOnUiThread(() -> {
-                        layerListAdapter.notifyDataSetChanged();
-                        // 默认选中新图层
-                        ListView listView = findViewById(R.id.layerListView);
-                        listView.setItemChecked(layerNames.size() - 1, true);
-                        // 缩放到GPS点范围
-                        layerManager.zoomToLayer(layer);
-                    });
-                }
-
-                @Override
-                public void onError(String error) {
-                    runOnUiThread(() -> 
-                        Toast.makeText(Main.this, "加载GPS数据失败: " + error, Toast.LENGTH_SHORT).show()
-                    );
-                }
-            });
-
         } catch (Exception e) {
-            Toast.makeText(this, "导入GPS数据失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "处理GPS数据失败: " + e.getMessage(), 
+                Toast.LENGTH_SHORT).show();
         }
     }
 
-    // 添加处理图例图片的方法
+    // 添加处理图例图的方法
     private void handleLegendImage(Uri uri) {
         try {
             // 保存图例图片
@@ -962,7 +921,7 @@ public class Main extends BaseMapActivity {
                 @Override
                 public void onLocationReceived(Point point) {
                     runOnUiThread(() -> {
-                        // 创建位置图层（如果不存在）
+                        // 创建位置层（如果不存在）
                         if (locationLayer == null) {
                             createLocationLayer();
                         }
@@ -1005,7 +964,7 @@ public class Main extends BaseMapActivity {
             // 创建要素图层
             locationLayer = new FeatureLayer(locationTable);
             
-            // 设置符号
+            // 设置号
             SimpleMarkerSymbol locationSymbol = new SimpleMarkerSymbol(
                 SimpleMarkerSymbol.Style.CIRCLE, 
                 Color.RED, 
@@ -1025,7 +984,7 @@ public class Main extends BaseMapActivity {
         }
     }
 
-    // 添加缺失的方法
+    // 加缺失的方法
     private void openGPSFilePicker() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("*/*");
@@ -1036,7 +995,7 @@ public class Main extends BaseMapActivity {
                 PICK_GPS_FILE
             );
         } catch (android.content.ActivityNotFoundException ex) {
-            Toast.makeText(this, "请安装文件管理器", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "请安装件管理器", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1071,7 +1030,7 @@ public class Main extends BaseMapActivity {
                 exportDir.mkdirs();
             }
 
-            // 导出每个选中的图层
+            // 导出每个选中图层
             ListView listView = findViewById(R.id.layerListView);
             boolean hasExported = false;
             for (int i = 0; i < featureLayers.size(); i++) {
@@ -1092,7 +1051,7 @@ public class Main extends BaseMapActivity {
             }
         } catch (Exception e) {
             Log.e(TAG, "导出图层失败: " + e.getMessage());
-            Toast.makeText(this, "导出图层失败: " + e.getMessage(), 
+            Toast.makeText(this, "导图层失败: " + e.getMessage(), 
                 Toast.LENGTH_SHORT).show();
         }
     }
@@ -1182,8 +1141,8 @@ public class Main extends BaseMapActivity {
                             attributeTable.addView(row);
                         }
                     } catch (Exception e) {
-                        Log.e(TAG, "创建属性表失败: " + e.getMessage());
-                        Toast.makeText(this, "创建属性表失败", Toast.LENGTH_SHORT).show();
+                        Log.e(TAG, "创属性表失败: " + e.getMessage());
+                        Toast.makeText(this, "建属性表失败", Toast.LENGTH_SHORT).show();
                     }
                 });
             } catch (Exception e) {
@@ -1218,7 +1177,7 @@ public class Main extends BaseMapActivity {
         super.onDestroy();
     }
 
-    // 添加要素模板菜单显示方法
+    // 添加素模板菜单显示方法
     private void showFeatureTemplateMenu(View view) {
         PopupMenu popup = new PopupMenu(this, view);
         popup.getMenu().add("点要素");
@@ -1241,7 +1200,9 @@ public class Main extends BaseMapActivity {
                     return false;
             }
             featureEditor.setCurrentGeometryType(geometryType);
-            Toast.makeText(this, "已选择" + item.getTitle() + "模板", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "已选择" + item.getTitle() + "模板\n请点击要素编辑工具开始绘", 
+                Toast.LENGTH_LONG).show();
+            Log.d(TAG, "Selected geometry type: " + geometryType);
             return true;
         });
         
@@ -1258,22 +1219,26 @@ public class Main extends BaseMapActivity {
         
         popup.setOnMenuItemClickListener(item -> {
             switch (item.getTitle().toString()) {
-                case "开始绘制":
+                case "开绘制":
                     if (featureEditor.getCurrentGeometryType() != null) {
                         isDrawing = true;
                         featureEditor.startEditing();
-                        Toast.makeText(this, "开始绘制，请点击地图添加节点", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "开始绘制，点击地图添加节点\n" +
+                            (featureEditor.getCurrentGeometryType() != GeometryType.POINT ? 
+                            "双击完成绘制，长按取消" : ""), Toast.LENGTH_LONG).show();
                     } else {
                         Toast.makeText(this, "请先选择要素类型", Toast.LENGTH_SHORT).show();
                     }
                     break;
+                
                 case "完成绘制":
                     if (isDrawing) {
                         featureEditor.completeDrawing();
                         isDrawing = false;
-                        Toast.makeText(this, "绘制完成", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "制完成", Toast.LENGTH_SHORT).show();
                     }
                     break;
+                
                 case "取消绘制":
                     if (isDrawing) {
                         featureEditor.cancelDrawing();
@@ -1281,10 +1246,12 @@ public class Main extends BaseMapActivity {
                         Toast.makeText(this, "已取消绘制", Toast.LENGTH_SHORT).show();
                     }
                     break;
+                
                 case "保存":
                     String fileName = "编辑要素_" + System.currentTimeMillis();
                     featureEditor.saveAsShapefile(fileName);
-                    Toast.makeText(this, "已保存为: " + fileName + ".shp", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "已保存为: " + fileName + ".shp", 
+                        Toast.LENGTH_SHORT).show();
                     break;
             }
             return true;
@@ -1300,7 +1267,7 @@ public class Main extends BaseMapActivity {
         try {
             startActivityForResult(intent, PICK_LEGEND_IMAGE);
         } catch (android.content.ActivityNotFoundException ex) {
-            // 如果没有图片选择器，尝试使用文件选择器
+            // 如果没有图片选择器，尝试使用文件择器
             intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("image/*");
             try {
@@ -1341,7 +1308,7 @@ public class Main extends BaseMapActivity {
 
     // 添加要素识别方法
     private void identifyFeature(android.graphics.Point screenPoint) {
-        // 获取当前可见的图层
+        // 获取当前可见的层
         List<FeatureLayer> visibleLayers = new ArrayList<>();
         for (FeatureLayer layer : featureLayers) {
             if (layer.isVisible()) {
@@ -1448,7 +1415,7 @@ public class Main extends BaseMapActivity {
 
             } catch (Exception e) {
                 Log.e(TAG, "显示要素属性失败: " + e.getMessage());
-                Toast.makeText(this, "显示要素属性失败: " + e.getMessage(), 
+                Toast.makeText(this, "显示素属性失败: " + e.getMessage(), 
                     Toast.LENGTH_SHORT).show();
             }
         });
@@ -1469,20 +1436,21 @@ public class Main extends BaseMapActivity {
             return;
         }
 
-        // 计算所有选中图层的总范围
+        // 计算所有选中图层总范围
         Envelope totalExtent = null;
         for (FeatureLayer layer : selectedLayers) {
             if (layer.getFullExtent() != null) {
                 if (totalExtent == null) {
                     totalExtent = layer.getFullExtent();
                 } else {
-                    totalExtent = GeometryEngine.union(totalExtent, layer.getFullExtent()).getExtent();
+                    totalExtent = GeometryEngine.union(totalExtent, 
+                        layer.getFullExtent()).getExtent();
                 }
             }
         }
 
         if (totalExtent != null) {
-            // 添加缓冲区
+            // 加缓冲区
             Envelope bufferedExtent = new Envelope(
                 totalExtent.getXMin() - totalExtent.getWidth() * 0.1,
                 totalExtent.getYMin() - totalExtent.getHeight() * 0.1,
@@ -1502,7 +1470,7 @@ public class Main extends BaseMapActivity {
                 return;
             }
 
-            // 清空并重新设置适配器
+            // 清并重新设置适配器
             layerNames.clear();
             for (FeatureLayer layer : featureLayers) {
                 layerNames.add(layer.getName());
@@ -1529,6 +1497,203 @@ public class Main extends BaseMapActivity {
             Log.e(TAG, "Error updating layer list: " + e.getMessage());
             Toast.makeText(this, "更新图层列表失败: " + e.getMessage(), 
                 Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void setupMapTouchListener() {
+        if (mMapView == null) {
+            Log.e(TAG, "MapView is null");
+            return;
+        }
+        
+        // 创建自定义的摸监听器
+        DefaultMapViewOnTouchListener mapTouchListener = new DefaultMapViewOnTouchListener(this, mMapView) {
+            @Override
+            public boolean onSingleTapUp(MotionEvent e) {
+                Log.d(TAG, "Single tap up detected");
+                // 取点击位置的屏幕坐标
+                android.graphics.Point screenPoint = new android.graphics.Point(
+                    Math.round(e.getX()),
+                    Math.round(e.getY()));
+                
+                // 将屏幕坐标转换为地图坐标
+                Point mapPoint = mMapView.screenToLocation(screenPoint);
+                
+                if (mapPoint != null) {
+                    Log.d(TAG, "Map point: " + mapPoint.getX() + ", " + mapPoint.getY());
+                    if (isDrawing) {
+                        Log.d(TAG, "Drawing mode active, handling click");
+                        // 如果正在绘制，添点
+                        handleDrawingClick(mapPoint);
+                        return true;
+                    } else if (isMapQueryEnabled) {
+                        Log.d(TAG, "Query mode active, handling click");
+                        // 如果正在进行地图查询
+                        identifyFeature(screenPoint);
+                        isMapQueryEnabled = false;
+                        return true;
+                    }
+                }
+                return super.onSingleTapUp(e);
+            }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                Log.d(TAG, "Double tap detected");
+                if (isDrawing && featureEditor.getCurrentGeometryType() != GeometryType.POINT) {
+                    // 双击完成绘制对于线和面要素）
+                    featureEditor.completeDrawing();
+                    isDrawing = false;
+                    Toast.makeText(Main.this, "绘制完成", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+                return super.onDoubleTap(e);
+            }
+
+            @Override
+            public void onLongPress(MotionEvent e) {
+                Log.d(TAG, "Long press detected");
+                if (isDrawing && featureEditor.getCurrentGeometryType() != GeometryType.POINT) {
+                    // 长按取消绘制
+                    featureEditor.cancelDrawing();
+                    isDrawing = false;
+                    Toast.makeText(Main.this, "已取消绘制", Toast.LENGTH_SHORT).show();
+                }
+                super.onLongPress(e);
+            }
+        };
+
+        // 设置触摸监听器
+        mMapView.setOnTouchListener(mapTouchListener);
+        Log.d(TAG, "Map touch listener set up");
+    }
+
+    private void handleDrawingClick(Point mapPoint) {
+        try {
+            if (featureEditor == null) {
+                Log.e(TAG, "FeatureEditor is null");
+                return;
+            }
+
+            GeometryType currentType = featureEditor.getCurrentGeometryType();
+            if (currentType == null) {
+                Log.e(TAG, "No geometry type selected");
+                Toast.makeText(this, "请先选择要素类型", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Log.d(TAG, "Handling drawing click for geometry type: " + currentType);
+            
+            switch (currentType) {
+                case POINT:
+                    // 对于点要素，直接添加并完成绘制
+                    featureEditor.addPoint(mapPoint);
+                    featureEditor.completeDrawing();
+                    isDrawing = false;
+                    Toast.makeText(this, "点要素添加成功", Toast.LENGTH_SHORT).show();
+                    break;
+                    
+                case POLYLINE:
+                case POLYGON:
+                    // 对于线和面要素，添加点到当前图形
+                    featureEditor.addPoint(mapPoint);
+                    Toast.makeText(this, "节点已添加，双击完成绘", Toast.LENGTH_SHORT).show();
+                    break;
+                    
+                default:
+                    Log.w(TAG, "Unsupported geometry type: " + currentType);
+                    Toast.makeText(this, "不支持的几何类型", Toast.LENGTH_SHORT).show();
+                    break;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error handling drawing click: " + e.getMessage());
+            Toast.makeText(this, "绘制失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            isDrawing = false;
+        }
+    }
+
+    // 添加获取文件名方法
+    private String getFileName(Uri uri) {
+        String result = null;
+        if ("content".equals(uri.getScheme())) {
+            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (nameIndex != -1) {
+                        result = cursor.getString(nameIndex);
+                    }
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.getPath();
+            int cut = result != null ? result.lastIndexOf('/') : -1;
+            if (cut != -1) {
+                result = result.substring(cut + 1);
+            }
+        }
+        return result != null ? result : "unknown";
+    }
+
+    private void copyFileFromUri(Uri sourceUri, File destFile) throws IOException {
+        try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
+             FileOutputStream outputStream = new FileOutputStream(destFile)) {
+            if (inputStream == null) {
+                throw new IOException("无法读取文件");
+            }
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, length);
+            }
+        }
+    }
+
+    private Uri findRelatedFile(Uri originalUri, String targetFileName) {
+        try {
+            String originalPath = getRealPathFromUri(originalUri);
+            if (originalPath != null) {
+                File originalFile = new File(originalPath);
+                File parentDir = originalFile.getParentFile();
+                if (parentDir != null && parentDir.exists()) {
+                    File targetFile = new File(parentDir, targetFileName);
+                    if (targetFile.exists()) {
+                        return Uri.fromFile(targetFile);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "查找相关文件失败: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // 添加复制相关文件的方法
+    private boolean copyRelatedShapefiles(Uri originalUri, String basePath) {
+        try {
+            String originalFileName = getFileName(originalUri);
+            String baseFileName = originalFileName.substring(0, originalFileName.length() - 4);
+            String[] extensions = {".shp", ".shx", ".dbf", ".prj"};
+            
+            File tempDir = new File(getFilesDir(), "temp_shapefiles");
+            if (!tempDir.exists()) {
+                tempDir.mkdirs();
+            }
+
+            for (String ext : extensions) {
+                Uri relatedUri = findRelatedFile(originalUri, baseFileName + ext);
+                if (relatedUri != null) {
+                    File destFile = new File(tempDir, baseFileName + ext);
+                    copyFileFromUri(relatedUri, destFile);
+                } else {
+                    Log.e(TAG, "Missing related file: " + baseFileName + ext);
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Error copying related files: " + e.getMessage());
+            return false;
         }
     }
 }

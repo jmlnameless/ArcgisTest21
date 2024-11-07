@@ -30,7 +30,7 @@ public class LayerManager {
     private final ExecutorService executorService;
     private final Handler mainHandler;
     
-    // 添加内存管理相关的常量
+    // 添加内存管理相的常量
     private static final int MAX_LAYERS = 10; // 最大图层数量
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 最大文件大小（50MB）
 
@@ -48,82 +48,52 @@ public class LayerManager {
         this.mainHandler = new Handler(Looper.getMainLooper());
     }
 
-    public void loadShapefileLayer(@NonNull String path, @NonNull LayerLoadCallback callback) {
-        // 检查地图是否已初始化
-        if (map == null || map.getOperationalLayers() == null) {
-            postError(callback, "地图未正确初始化");
-            return;
-        }
-
-        // 检查图层数量限制
-        if (layers.size() >= MAX_LAYERS) {
-            postError(callback, "图层数量已达到上限，请先移除一些图层");
-            return;
-        }
-
-        executorService.execute(() -> {
-            try {
-                // 检查文件是否存在
-                File file = new File(path);
-                if (!file.exists()) {
-                    postError(callback, "文件不存在: " + path);
-                    return;
-                }
-
-                // 检查文件大小
-                if (file.length() > MAX_FILE_SIZE) {
-                    postError(callback, "文件过大，超过50MB限制");
-                    return;
-                }
-
-                // 检查相关文件是否完整
-                if (!checkShapefileFiles(path)) {
-                    postError(callback, "Shapefile文件不完整，请确保.shp、.shx、.dbf、.prj文件都存在");
-                    return;
-                }
-
-                // 创建要素表
-                ShapefileFeatureTable featureTable = new ShapefileFeatureTable(path);
-
-                // 加载要素表
-                featureTable.loadAsync();
-                featureTable.addDoneLoadingListener(() -> {
-                    if (featureTable.getLoadStatus() == LoadStatus.LOADED) {
-                        // 创建要素图层
-                        FeatureLayer layer = new FeatureLayer(featureTable);
-                        layer.setMaxScale(0); // 不限制最大比例
-                        layer.setMinScale(0); // 不限制最小比例
-                        
-                        // 异步加载图层
-                        layer.loadAsync();
-                        layer.addDoneLoadingListener(() -> {
-                            if (layer.getLoadStatus() == LoadStatus.LOADED) {
-                                mainHandler.post(() -> {
-                                    // 如果有太多图层，移除最早添加的图层
-                                    if (layers.size() >= MAX_LAYERS) {
-                                        FeatureLayer oldestLayer = layers.get(0);
-                                        map.getOperationalLayers().remove(oldestLayer);
-                                        layers.remove(0);
-                                    }
-
-                                    map.getOperationalLayers().add(layer);
-                                    layers.add(layer);
-                                    callback.onSuccess(layer);
-                                });
-                            } else {
-                                postError(callback, "图层加载失败: " + layer.getLoadError().getMessage());
-                                // 从地图中移除图层
-                                map.getOperationalLayers().remove(layer);
-                            }
-                        });
-                    } else {
-                        postError(callback, "要素表加载失败: " + featureTable.getLoadError().getMessage());
-                    }
-                });
-            } catch (Exception e) {
-                postError(callback, "加载图层异常: " + e.getMessage());
+    public void loadShapefileLayer(String path, LayerLoadCallback callback) {
+        try {
+            // 检查参数
+            if (path == null || callback == null) {
+                throw new IllegalArgumentException("Path and callback cannot be null");
             }
-        });
+
+            // 检查文件是否存在
+            File shpFile = new File(path);
+            if (!shpFile.exists()) {
+                callback.onError("Shapefile不存在: " + path);
+                return;
+            }
+
+            // 创建要素表
+            ShapefileFeatureTable featureTable = new ShapefileFeatureTable(path);
+            
+            // 加载要素表
+            featureTable.loadAsync();
+            featureTable.addDoneLoadingListener(() -> {
+                if (featureTable.getLoadStatus() == LoadStatus.LOADED) {
+                    // 创建要素图层
+                    FeatureLayer layer = new FeatureLayer(featureTable);
+                    layer.loadAsync();
+                    layer.addDoneLoadingListener(() -> {
+                        if (layer.getLoadStatus() == LoadStatus.LOADED) {
+                            mainHandler.post(() -> {
+                                map.getOperationalLayers().add(layer);
+                                layers.add(layer);
+                                callback.onSuccess(layer);
+                            });
+                        } else {
+                            String error = layer.getLoadError() != null ? 
+                                layer.getLoadError().getMessage() : "Unknown error";
+                            mainHandler.post(() -> callback.onError("图层加载失败: " + error));
+                        }
+                    });
+                } else {
+                    String error = featureTable.getLoadError() != null ? 
+                        featureTable.getLoadError().getMessage() : "Unknown error";
+                    mainHandler.post(() -> callback.onError("要素表加载失败: " + error));
+                }
+            });
+        } catch (Exception e) {
+            mainHandler.post(() -> callback.onError("加载Shapefile失败: " + e.getMessage()));
+        }
     }
 
     // 检查Shapefile相关文件是否完整
